@@ -142,23 +142,23 @@ xpcall(function()
 	local referencable_output = {}
 	local labels = {}
 	
-	for ix = 1, #args do
-		print("assembling: \008t\"" .. args[ix] .. "\"")
 
-		local function emit_message(row, severity, message)
-			if     severity == "error" then
-				failed = true
-				print("\008l" .. args[ix] .. ": line " .. row .. ": error: \008w" .. message)
-			elseif severity == "warning" then
-				failed = true
-				print("\008o" .. args[ix] .. ": line " .. row .. ": warning: \008w" .. message)
-			elseif severity == "note" then
-				failed = true
-				print("\008t" .. args[ix] .. ": line " .. row .. ": note: \008w" .. message)
-			end
+	local function emit_message(src, row, severity, message)
+		if     severity == "error" then
+			failed = true
+			print("\008l" .. src .. ": line " .. row .. ": error: \008w" .. message)
+		elseif severity == "warning" then
+			failed = true
+			print("\008o" .. src .. ": line " .. row .. ": warning: \008w" .. message)
+		elseif severity == "note" then
+			failed = true
+			print("\008t" .. src .. ": line " .. row .. ": note: \008w" .. message)
 		end
-	
-		local handle = io.open(args[ix], "r")
+	end
+
+	for arg_ix = 1, #args do
+		print("assembling: \008t\"" .. args[arg_ix] .. "\"")
+		local handle = io.open(args[arg_ix], "r")
 		if not handle then
 			print("failed to open file for reading")
 			return
@@ -172,7 +172,7 @@ xpcall(function()
 				if current_global_label then
 					label_name = current_global_label .. label_name
 				else
-					emit_message(command.row, "note", "no current global label set, throwing error")
+					emit_message(command.src, command.row, "note", "no current global label set, throwing error")
 					label_name = false
 				end
 			end
@@ -301,7 +301,7 @@ xpcall(function()
 				if value_found then
 					return true
 				else
-					emit_message(command.row, "error", "invalid operand '" .. command[key] .. "' (" .. key .. ")")
+					emit_message(command.src, command.row, "error", "invalid operand '" .. command[key] .. "' (" .. key .. ")")
 					return false
 				end
 			else
@@ -342,7 +342,7 @@ xpcall(function()
 				end):gsub(";.*$", "")
 				
 				if lines[line_cnt]:find("['\"]") then
-					emit_message(line_cnt, "error", "quotation fail")
+					emit_message(args[arg_ix], line_cnt, "error", "quotation fail")
 				end
 				local line_clean = lines[line_cnt]
 				
@@ -362,6 +362,7 @@ xpcall(function()
 					if captures[1] then
 						command_fields = {
 							row = line_cnt,
+							src = args[arg_ix],
 							labels = command_labels
 						}
 						for key, value in next, captures do
@@ -376,7 +377,7 @@ xpcall(function()
 						command_labels = {} -- * flush label store
 					end
 				else
-					emit_message(line_cnt, "error", "pattern fail")
+					emit_message(args[arg_ix], line_cnt, "error", "pattern fail")
 				end
 			end
 		end
@@ -387,7 +388,7 @@ xpcall(function()
 			for lx = 1, #command.labels do
 				local label_cm_name = command.labels[lx]
 				if not is_label(label_cm_name) then
-					emit_message(command.row, "error", "invalid label name '" .. label_cm_name .. "'")
+					emit_message(command.src, command.row, "error", "invalid label name '" .. label_cm_name .. "'")
 				else
 					local old_label_name = label_cm_name
 					label_cm_name = globalize_label(command, old_label_name)
@@ -397,7 +398,7 @@ xpcall(function()
 					if label_cm_name then
 						labels[label_cm_name] = #referencable_output
 					else
-						emit_message(command.row, "error", "invalid label name '" .. old_label_name .. "'")
+						emit_message(command.src, command.row, "error", "invalid label name '" .. old_label_name .. "'")
 					end
 				end
 			end
@@ -407,12 +408,12 @@ xpcall(function()
 				command.mnemonic_def = mnemonic_def
 				
 				if not mnemonic_def then
-					emit_message(command.row, "error", "unknown mnemonic")
+					emit_message(command.src, command.row, "error", "unknown mnemonic")
 					
 				elseif (mnemonic_def[2]:find("%d"  ) and true) ~= ((command.pv or command.pm) and true) then
-					emit_message(command.row, "error", "invalid operand list (primary)")
+					emit_message(command.src, command.row, "error", "invalid operand list (primary)")
 				elseif (mnemonic_def[2]:find("%d%d") and true) ~= ((command.sv or command.sm) and true) then
-					emit_message(command.row, "error", "invalid operand list (secondary)")
+					emit_message(command.src, command.row, "error", "invalid operand list (secondary)")
 					
 				elseif not parse_operand(command, "pm") then
 				elseif not parse_operand(command, "pb") then
@@ -421,7 +422,7 @@ xpcall(function()
 				elseif not parse_operand(command, "sb") then
 				elseif not parse_operand(command, "sv") then
 				elseif not query_bitmap(command) then
-					emit_message(command.row, "error", "invalid operand list (type)")
+					emit_message(command.src, command.row, "error", "invalid operand list (type)")
 				
 				else
 					table.insert(referencable_output, command)
@@ -450,7 +451,8 @@ xpcall(function()
 										table.insert(referencable_output, {
 											absolute = 0x20000000,
 											op2v = emit_tbl[ix].label,
-											row = command.row
+											row = command.row,
+											src = command.src
 										})
 									end
 								else
@@ -460,14 +462,14 @@ xpcall(function()
 								end
 							end
 						else
-							emit_message(command.row, "error", "dw directive failed: " .. results[2])
+							emit_message(command.src, command.row, "error", "dw directive failed: " .. results[2])
 						end
 					else
-						emit_message(command.row, "error", "invalid dw directive: " .. err)
+						emit_message(command.src, command.row, "error", "invalid dw directive: " .. err)
 					end
 					
 				else
-					emit_message(command.row, "error", "invalid directive: " .. command_str)
+					emit_message(command.src, command.row, "error", "invalid directive: " .. command_str)
 					
 				end
 			
@@ -485,7 +487,7 @@ xpcall(function()
 				local label_name = command.op2v
 				command.op2v = labels[label_name]
 				if not command.op2v then
-					emit_message(command.row, "error", "unknown label name '" .. label_name .. "'")
+					emit_message(command.src, command.row, "error", "unknown label name '" .. label_name .. "'")
 				end
 			end
 		end
