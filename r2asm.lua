@@ -31,7 +31,7 @@ xpcall(function()
 		end
 		model = model .. string.char(ctype % 0x100)
 	end
-	
+
 	local flash_func
 	if model == "R216K2A" then
 		local ram_x, ram_y, ram_w, ram_h = head_x + 70, head_y - 99, 128, 16
@@ -60,7 +60,7 @@ xpcall(function()
 		print("no input file")
 		return
 	end
-	
+
 	local PATTERNS = {
 		{"^%s*$",                                                           "em"},
 		{"^%s*%%(.+)%s*$",                                                  "sf"},
@@ -74,7 +74,7 @@ xpcall(function()
 		{"^%s*(%S+)%s*(%S+)%s*$",                                           "mn", "pv"},
 		{"^%s*(%S+)%s*(%S+)%s*,%s*(%S+)%s*$",                               "mn", "pv", "sv"},
 	}
-	
+
 	local REGISTERS = {
 		[ "r0"] = 0x0, [ "r1"] = 0x1, [ "r2"] = 0x2, [ "r3"] = 0x3,
 		[ "r4"] = 0x4, [ "r5"] = 0x5, [ "r6"] = 0x6, [ "r7"] = 0x7,
@@ -96,7 +96,7 @@ xpcall(function()
 		["jle" ] = {0x3100000A, " 2"}, ["jnle"] = {0x3100000B, " 2"}, ["jl"  ] = {0x3100000C, " 2"}, ["jnl" ] = {0x3100000D, " 2"},
 		["jbe" ] = {0x3100000E, " 2"}, ["jnbe"] = {0x3100000F, " 2"}, ["swm" ] = {0x28000000, " 2"}, ["rol" ] = {0x32000000, "12"},
 		["ror" ] = {0x33000000, "12"}, ["shl" ] = {0x34000000, "12"}, ["shr" ] = {0x35000000, "12"}, ["shld"] = {0x36000000, "12"},
-		["shrd"] = {0x37000000, "12"}, ["bump"] = {0x38000000, " 2"}, ["wait"] = {0x39000000, "1 "}, ["send"] = {0x3A000000, "12"},
+		["shrd"] = {0x37000000, "12"}, ["bump"] = {0x38000000, "1 "}, ["wait"] = {0x39000000, "1 "}, ["send"] = {0x3A000000, "12"},
 		["recv"] = {0x3B000000, "12"}, ["push"] = {0x3C000000, " 2"}, ["pop" ] = {0x3D000000, "1 "}, ["call"] = {0x3E000000, " 2"},
 		["ret" ] = {0x3F000000, "  "}, ["nop" ] = {0x20000000, "  "}
 	}
@@ -112,7 +112,7 @@ xpcall(function()
 	MNEMONICS["jge" ] = MNEMONICS["jnl" ]
 	MNEMONICS["jna" ] = MNEMONICS["jbe" ]
 	MNEMONICS["ja"  ] = MNEMONICS["jnbe"]
-	
+
 	local BITMAPS = {
 				 --        mask,   soLS,   svLS,   poLS,   pvLS
 		["rv rv"] = {0x00000000,  0,  0,  4,  4,  0,  0,  4,  0},
@@ -138,10 +138,10 @@ xpcall(function()
 	}
 
 	local failed = false
-	
+
 	local referencable_output = {}
 	local labels = {}
-	
+
 
 	local function emit_message(src, row, severity, message)
 		if     severity == "error" then
@@ -165,7 +165,7 @@ xpcall(function()
 		end
 		local content = handle:read("*a"):gsub("[\1\2]", "%?")
 		handle:close()
-		
+
 		local current_global_label
 		local function globalize_label(command, label_name)
 			if label_name:find("^%.") then
@@ -178,7 +178,7 @@ xpcall(function()
 			end
 			return label_name
 		end
-		
+
 		local dw_spec_tbl_meta = {}
 		local dw_fenv = {
 			["false"] = true,
@@ -242,7 +242,7 @@ xpcall(function()
 			end
 			return result
 		end
-		
+
 		local function query_bitmap(command)
 			command.op1v, command.op1b, command.op1r = 0, 0, "rv"
 			command.op2v, command.op2b, command.op2r = 0, 0, "rv"
@@ -262,20 +262,20 @@ xpcall(function()
 				command.op2b = command.pb or               0
 				command.op2r = command.pr or "rv"
 			end
-			
+
 			command.bitmap = BITMAPS[command.op1r .. " " .. command.op2r]
 			return command.bitmap and true
 		end
-		
+
 		local function is_label(name)
 			return name:sub(name:match("^[%a_][%w_]*%.()") or name:match("^%.()") or 1):find("^[%a_][%w_]*$") and true
 		end
-		
+
 		local function parse_operand(command, key)
 			local op_name, op_role = key:match("(.)(.)")
 			if command[key] then
 				local value_found = false
-				
+
 				if REGISTERS[command[key]] then
 					command[key] = REGISTERS[command[key]]
 					value_found = true
@@ -284,7 +284,7 @@ xpcall(function()
 					else
 						command[op_name .. "r"] = "r" .. op_role
 					end
-					
+
 				elseif op_role ~= "b" and tonumber(command[key]) then
 					command[key] = tonumber(command[key])
 					value_found = true
@@ -297,7 +297,7 @@ xpcall(function()
 						command[op_name .. "r"] = "i" .. op_role
 					end
 				end
-				
+
 				if value_found then
 					return true
 				else
@@ -311,7 +311,7 @@ xpcall(function()
 				return true
 			end
 		end
-		
+
 		local command_labels = {}
 		local lines = {""}
 		local literals = {}
@@ -340,12 +340,12 @@ xpcall(function()
 					literals[literal_index] = cap
 					return literal_index
 				end):gsub(";.*$", "")
-				
+
 				if lines[line_cnt]:find("['\"]") then
 					emit_message(args[arg_ix], line_cnt, "error", "quotation fail")
 				end
 				local line_clean = lines[line_cnt]
-				
+
 				while true do
 					local label_name, rest = line_clean:match("^%s*(%S+)%s*:%s*(.*)$")
 					if label_name then
@@ -355,7 +355,7 @@ xpcall(function()
 						break
 					end
 				end
-				
+
 				local command_fields
 				for ix = 1, #PATTERNS do
 					local captures = {line_clean:match(PATTERNS[ix][1])}
@@ -381,10 +381,10 @@ xpcall(function()
 				end
 			end
 		end
-		
+
 		for ix = 1, #commands do
 			local command = commands[ix]
-			
+
 			for lx = 1, #command.labels do
 				local label_cm_name = command.labels[lx]
 				if not is_label(label_cm_name) then
@@ -402,19 +402,19 @@ xpcall(function()
 					end
 				end
 			end
-			
+
 			if command.mn then
 				local mnemonic_def = MNEMONICS[command.mn]
 				command.mnemonic_def = mnemonic_def
-				
+
 				if not mnemonic_def then
 					emit_message(command.src, command.row, "error", "unknown mnemonic")
-					
+
 				elseif (mnemonic_def[2]:find("%d"  ) and true) ~= ((command.pv or command.pm) and true) then
 					emit_message(command.src, command.row, "error", "invalid operand list (primary)")
 				elseif (mnemonic_def[2]:find("%d%d") and true) ~= ((command.sv or command.sm) and true) then
 					emit_message(command.src, command.row, "error", "invalid operand list (secondary)")
-					
+
 				elseif not parse_operand(command, "pm") then
 				elseif not parse_operand(command, "pb") then
 				elseif not parse_operand(command, "pv") then
@@ -423,11 +423,11 @@ xpcall(function()
 				elseif not parse_operand(command, "sv") then
 				elseif not query_bitmap(command) then
 					emit_message(command.src, command.row, "error", "invalid operand list (type)")
-				
+
 				else
 					table.insert(referencable_output, command)
 				end
-				
+
 			elseif command.sf then
 				local command_str, rest = command.sf:match("^(%S*)%s*(.*)$")
 				if command_str == "dw" then
@@ -467,22 +467,30 @@ xpcall(function()
 					else
 						emit_message(command.src, command.row, "error", "invalid dw directive: " .. err)
 					end
-					
+
 				else
 					emit_message(command.src, command.row, "error", "invalid directive: " .. command_str)
-					
+
 				end
-			
+
 			else
 				error("sanity check failure: no valid field in command")
 			end
 		end
 	end
-	
+
 	if not failed then
 		for ix = 1, #referencable_output do
 			local command = referencable_output[ix]
-			
+
+			if type(command.op1v) == "string" then
+				local label_name = command.op1v
+				command.op1v = labels[label_name]
+				if not command.op1v then
+					emit_message(command.src, command.row, "error", "unknown label name '" .. label_name .. "'")
+				end
+			end
+
 			if type(command.op2v) == "string" then
 				local label_name = command.op2v
 				command.op2v = labels[label_name]
@@ -492,15 +500,15 @@ xpcall(function()
 			end
 		end
 	end
-	
+
 	if not failed then
 		local assembler_output = {}
 		--flash_func(assembler_output)
-		
+
 		--local handle = io.open("log.log", "w")
 		for ix = 1, #referencable_output do
 			local command = referencable_output[ix]
-			
+
 			if command.absolute then
 				if command.op2v then
 					command.absolute = command.absolute + command.op2v
@@ -515,11 +523,11 @@ xpcall(function()
 					command.op2b % 2 ^ command.bitmap[2] * 2 ^ command.bitmap[3]
 				)
 			end
-			
+
 			--handle:write(("%08X\n"):format(assembler_output[ix]))
 		end
 		--handle:close()
-		
+
 		flash_func(assembler_output)
 	end
 
