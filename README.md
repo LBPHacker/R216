@@ -1,6 +1,8 @@
 # R216 stuff
 
-Currently only includes the assembler for R216K2A, `r2asm.lua`.
+Pull requests are welcome. Nothing much to say here. Go check out the
+[manual][000] instead.
 
-Will update this later.
+[000]: https://lbphacker.pw/powdertoy/R216/manual.md
+	"R216 Manual and Instruction Reference"
 

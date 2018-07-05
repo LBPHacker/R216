@@ -27,257 +27,321 @@ start:
     bump r10                  ; * Reset terminal.
     send r10, 0x1012
     mov r0, .string_formula
-    call write_string
+    call write_string         ; * Print formula for fun.
 .demo:
-    mov r12, .inputdata
+    mov r12, .inputdata_prompt
 .inputdata_loop:
-    send r10, [r12]
     mov r0, r12
-    add r0, 1
-    call write_string
+    call write_string         ; * Print prompts, one for each of A, B and C.
     mov r0, 14
-    call clear_continuous
+    call clear_continuous     ; * Clear previous input.
     mov r0, global_str_buf
     mov r1, 14
     mov r7, 0x200F
     mov r11, [r12]
     add r11, 2
-    call read_string
+    call read_string          ; * Read string.
     mov r0, global_str_buf
-    call float_from_string
+    call float_from_string    ; * Convert to float.
     test r1, r1
-    jnz .inputdata_loop
-    push r3
+    jnz .inputdata_loop       ; * Try again if the conversion failed.
+    push r3                   ; * Push number to stack.
     push r2
     add r12, 6
     test [r12], 0xFFFF
-    jnz .inputdata_loop
+    jnz .inputdata_loop       ; * Exit loop if there are no more prompts left.
+                              ; * At this point the stack is ($, A, B, C) (where
+                              ;   $ is the bottom of the stack in this context).
     send r10, 0x2080
     send r10, 0x1072
     mov r0, .working_string
-    call write_string
-    mov r13, 0x1072
-    mov r12, .working_string
-    mov r0, [sp+4]
+    call write_string         ; * Draw empty progress bar.
+    mov r13, 0x1072           ; * Prepare for bumping the progress bar
+    mov r12, .working_string  ;   continuously throughout the calculation.
+    mov r0, [sp+4]            ; * Move A into r0_32.
     mov r1, [sp+5]
-    pop r2
-    pop r3
-    call float_multiply
-    call .bump_progress_bar
-    mov r2, 0x0000
-    mov r3, 0x4080
-    call float_multiply
-    push r1
-    push r0
-    call .bump_progress_bar
-    mov r0, [sp+4]
-    mov r1, [sp+5]
-    mov r2, 0x0000
-    mov r3, 0x4000
-    call float_multiply
-    mov [sp+4], r0
-    mov [sp+5], r1
-    call .bump_progress_bar
-    mov r0, [sp+2]
-    mov r1, [sp+3]
-    mov r2, 0x8000
-    xor [sp+3], r2
-    mov r2, r0
-    mov r3, r1
-    call float_multiply
-    call .bump_progress_bar
-    pop r2
-    pop r3
-    call float_subtract
-    call .bump_progress_bar
-    mov r2, r1
+    mov r2, r1                ; * Check if A is 0, ...
     and r2, 0x7FFF
     or r2, r0
-    jz .demo_emit_single
-    test r1, 0x8000
-    jnz .demo_emit_complex
-    call float_sqrt
-    push r1
-    push r0
+    jz .demo_emit_linear      ;   ... branch off if it is.
+    pop r2                    ; * Pop C, stack is ($, A, B).
+    pop r3
+    call float_multiply       ; * Multiply A and C, yielding AC.
     call .bump_progress_bar
-    mov r0, [sp+2]
-    mov r1, [sp+3]
-    mov r2, [sp+0]
-    mov r3, [sp+1]
-    call float_subtract
+    mov r2, 0x0000            ; * This is 4.0.
+    mov r3, 0x4080
+    call float_multiply       ; * Multiply AC and 4.0, yielding 4AC.
     push r1
-    push r0
+    push r0                   ; * Push 4AC back, stack is ($, A, B, 4AC).
     call .bump_progress_bar
-    mov r0, [sp+4]
+    mov r0, [sp+4]            ; * Move A into r0_32.
     mov r1, [sp+5]
-    mov r2, [sp+2]
-    mov r3, [sp+3]
-    call float_add
+    mov r2, 0x0000            ; * This is 2.0.
+    mov r3, 0x4000
+    call float_multiply       ; * Multiply A and 2.0, yielding 2A.
     mov [sp+4], r0
-    mov [sp+5], r1
+    mov [sp+5], r1            ; * Write 2A back, stack is ($, 2A, B, 4AC).
     call .bump_progress_bar
-    mov r2, [sp+6]
+    mov r0, [sp+2]            ; * Move B into r0_32.
+    mov r1, [sp+3]
+    mov r2, 0x8000
+    xor [sp+3], r2            ; * Both r0_32 and the old B on the stack becomes
+    mov r2, r0                ;   -B. Stack is ($, 2A, -B, 4AC).
+    mov r3, r1                ; * Copy -B into r2_32.
+    call float_multiply       ; * Multiply -B and -B, yielding B**2.
+    call .bump_progress_bar
+    pop r2
+    pop r3                    ; * Pop 4AC into r2_32, stack is ($, 2A, -B).
+    call float_subtract       ; * Subtract 4AC from B**2, yielding B**2-4AC.
+    call .bump_progress_bar
+    mov r2, r1                ; * Check if B**2-4AC is 0, ...
+    and r2, 0x7FFF
+    or r2, r0
+    jz .demo_emit_single      ;   ... branch off if it is.
+    test r1, 0x8000           ; * Check if B**2-4AC is negative,
+    jnz .demo_emit_complex    ;   branch off if it is.
+    call float_sqrt
+    push r1                   ; * Calculate sqrt(B**2-4AC) and push it onto the
+    push r0                   ;   stack, stack is ($, 2A, -B, sqrt(B**2-4AC)).
+    call .bump_progress_bar
+    mov r0, [sp+2]            ; * Move -B into r0_32.
+    mov r1, [sp+3]
+    mov r2, [sp+0]            ; * Move sqrt(B**2-4AC) into r2_32.
+    mov r3, [sp+1]
+    call float_subtract       ; * Subtract sqrt(B**2-4AC) from -B, push the
+    push r1                   ;   result back, stack is ($, 2A,
+    push r0                   ;   -B, sqrt(B**2-4AC), -B-sqrt(B**2-4AC)).
+    call .bump_progress_bar
+    mov r0, [sp+4]            ; * Move -B into r0_32.
+    mov r1, [sp+5]
+    mov r2, [sp+2]            ; * Move sqrt(B**2-4AC) into r2_32.
+    mov r3, [sp+3]
+    call float_add            ; * Add sqrt(B**2-4AC) to -B, update the old -B on
+    mov [sp+4], r0            ;   the stack, stack is ($, 2A, -B+sqrt(B**2-4AC), 
+    mov [sp+5], r1            ;   sqrt(B**2-4AC), -B-sqrt(B**2-4AC)).
+    call .bump_progress_bar
+    mov r2, [sp+6]            ; * Move 2A into r2_32.
     mov r3, [sp+7]
-    pop r0
-    pop r1
-    call float_divide
+    pop r0                    ; * Pop -B-sqrt(B**2-4AC) into r0_32, stack is
+    pop r1                    ;   ($, 2A, -B+sqrt(B**2-4AC), sqrt(B**2-4AC)).
+    call float_divide         ; * Divide...
     call .bump_progress_bar
     mov r2, r0
     mov r3, r1
     mov r0, global_str_buf
-    call float_to_string
+    call float_to_string      ;   ... and then convert,...
     send r10, 0x1090
     mov r0, .string_x1
-    call write_string
+    call write_string         ;   ... then tell the user what we're printing,...
     mov r0, 13
-    call clear_continuous
+    call clear_continuous     ;   ... then clear the previous solution...
     send r10, 0x1093
     mov r0, global_str_buf
-    call write_string
+    call write_string         ;   ... and print the current solution.
     call .bump_progress_bar
-    mov r0, [sp+2]
+    mov r0, [sp+2]            ; * Move -B+sqrt(B**2-4AC) into r0_32.
     mov r1, [sp+3]
-    mov r2, [sp+4]
+    mov r2, [sp+4]            ; * Move 2A into r2_32.
     mov r3, [sp+5]
-    call float_divide
+    call float_divide         ; * Divide...
     call .bump_progress_bar
     mov r2, r0
     mov r3, r1
     mov r0, global_str_buf
-    call float_to_string
+    call float_to_string      ;   ... and then convert,...
     send r10, 0x10A0
     mov r0, .string_x2
-    call write_string
+    call write_string         ;   ... then tell the user what we're printing,...
     mov r0, 13
-    call clear_continuous
+    call clear_continuous     ;   ... then clear the previous solution...
     send r10, 0x10A3
     mov r0, global_str_buf
-    call write_string
+    call write_string         ;   ... and print the current solution.
     call .bump_progress_bar
-    add sp, 6
-    jmp .demo_wrapup
+    add sp, 6                 ; * Pop everything, stack is ($).
+    jmp .demo_wrapup          ; * Then branch off.
 .demo_emit_complex:
-    call .bump_progress_bar
-    call .bump_progress_bar
-    xor r1, 0x8000
-    call float_sqrt
+    call .bump_progress_bar   ; * We can skip a few steps here.
+    call .bump_progress_bar   ; * Reminder: stack is ($, 2A, -B).
+    xor r1, 0x8000            ; * r0_32 is B**2-4AC, and it's negative. Make
+    call float_sqrt           ;   it positive and take the square root.
     push r1
-    push r0
-    call .bump_progress_bar
-    mov r0, [sp+2]
+    push r0                   ; * Push it back,
+    call .bump_progress_bar   ;   stack is ($, 2A, -B, sqrt(B**2-4AC)).
+    mov r0, [sp+2]            ; * Move -B into r0_32.
     mov r1, [sp+3]
-    mov r2, [sp+4]
+    mov r2, [sp+4]            ; * Move 2A into r0_32.
     mov r3, [sp+5]
-    call float_divide
-    call .bump_progress_bar
+    call float_divide         ; * Divide -B by 2A, yielding -B/2A, the real part
+    call .bump_progress_bar   ;   of both solutions.
     mov r2, r0
     mov r3, r1
     mov r0, global_str_buf
-    call float_to_string
+    call float_to_string      ; * And then convert,...
     send r10, 0x1090
     mov r0, .string_xc
-    call write_string
+    call write_string         ;   ... then tell the user what we're printing,...
     mov r0, 14
-    call clear_continuous
+    call clear_continuous     ;   ... then clear the previous solution...
     send r10, 0x1092
     mov r0, global_str_buf
-    call write_string
+    call write_string         ;   ... and print the current solution.
     call .bump_progress_bar
-    pop r0
-    pop r1
-    mov r2, [sp+2]
+    pop r0                    ; * Pop sqrt(B**2-4AC) into r0_32,
+    pop r1                    ;   stack is ($, 2A, -B).
+    mov r2, [sp+2]            ; * Move 2A into r2_32.
     mov r3, [sp+3]
-    call float_divide
+    call float_divide         ; * Divide...
     call .bump_progress_bar
     mov r2, r0
     mov r3, r1
     mov r0, global_str_buf
-    call float_to_string
+    call float_to_string      ;   ... and then convert,...
     send r10, 0x10A0
     mov r0, .string_xpm
-    call write_string
+    call write_string         ;   ... then tell the user what we're printing,...
     mov r0, 14
-    call clear_continuous
+    call clear_continuous     ;   ... then clear the previous solution...
     send r10, 0x10A2
     mov r0, global_str_buf
-    call write_string
-    send r10, 105
+    call write_string         ;   ... and print both current solutions
+    send r10, 105             ;   with an i for the imaginary parts.
     call .bump_progress_bar
-    add sp, 4
-    jmp .demo_wrapup
-.demo_emit_single:
-    call .bump_progress_bar
-    call .bump_progress_bar
-    call .bump_progress_bar
+    add sp, 4                 ; * Pop everything, stack is ($).
+    jmp .demo_wrapup          ; * Then branch off.
+.demo_emit_linear:
+    call .bump_progress_bar   ; * We can skip a few steps here.
     call .bump_progress_bar
     call .bump_progress_bar
+    call .bump_progress_bar
+    call .bump_progress_bar
+    call .bump_progress_bar
+    call .bump_progress_bar
+    call .bump_progress_bar
+    call .bump_progress_bar
+    call .bump_progress_bar   ; * Reminder: stack is ($, A, B, C).
     pop r0
-    pop r1
+    pop r1                    ; * Pop C into r0_32, stack is ($, A, B).
     pop r2
-    pop r3
-    call float_divide
+    pop r3                    ; * Pop B into r2_32, stack is ($, A).
+    mov r4, r3                ; * Check if B is 0, ...
+    and r4, 0x7FFF
+    or r4, r2
+    jz .demo_emit_constant    ;   ... branch off if it is.
+    xor r3, 0x8000            ; * Negate B, yielding -B.
+    call float_divide         ; * Divide...
     call .bump_progress_bar
     mov r2, r0
     mov r3, r1
     mov r0, global_str_buf
-    call float_to_string
+    call float_to_string      ;   ... and then convert,...
     send r10, 0x1090
     mov r0, .string_xc
-    call write_string
+    call write_string         ;   ... then tell the user what we're printing,...
     mov r0, 14
-    call clear_continuous
+    call clear_continuous     ;   ... then clear the previous solution...
     send r10, 0x1092
     mov r0, global_str_buf
-    call write_string
+    call write_string         ;   ... and print both current solution.
+    send r10, 0x10A0
+    mov r0, .string_xl
+    call write_string         ; * State that this is the linear equation case.
+    call .bump_progress_bar
+    add sp, 2                 ; * Pop everything, stack is ($).
+    jmp .demo_wrapup          ; * Then branch off.
+.demo_emit_constant:
+    call .bump_progress_bar   ; * Reminder: stack is ($, A).
+    send r10, 0x1090
+    mov r0, .string_xn
+    call write_string         ; * State that this is the no solution case.
+    send r10, 0x10A0
+    mov r0, 16
+    call clear_continuous     ; * Clear the previous solution.
+    call .bump_progress_bar
+    add sp, 2                 ; * Pop everything, stack is ($).
+    jmp .demo_wrapup          ; * Then branch off.
+.demo_emit_single:
+    call .bump_progress_bar   ; * We can skip a few steps here.
+    call .bump_progress_bar
+    call .bump_progress_bar
+    call .bump_progress_bar
+    call .bump_progress_bar   ; * Reminder: stack is ($, 2A, -B).
+    pop r0
+    pop r1                    ; * Pop -B into r0_32, stack is ($, 2A).
+    pop r2
+    pop r3                    ; * Pop 2A into r2_32, stack is ($).
+    call float_divide         ; * Divide...
+    call .bump_progress_bar
+    mov r2, r0
+    mov r3, r1
+    mov r0, global_str_buf
+    call float_to_string      ;   ... and then convert,...
+    send r10, 0x1090
+    mov r0, .string_xc
+    call write_string         ;   ... then tell the user what we're printing,...
+    mov r0, 14
+    call clear_continuous     ;   ... then clear the previous solution...
+    send r10, 0x1092
+    mov r0, global_str_buf
+    call write_string         ;   ... and print both current solution.
+    send r10, 0x10A0
+    mov r0, .string_xs
+    call write_string         ; * State that this is the single solution case.
     call .bump_progress_bar
 .demo_wrapup:
     send r10, 0x2003
     send r10, 0x1071
     mov r0, .press_any_key_string
-    call write_string
+    call write_string         ; * Display nice Press any key message.
     mov r6, 0x2003
     mov r11, 0x107E
-    call read_character_blink
+    call read_character_blink ; * Wait for a key press while blinking.
     send r10, 0x2000
     send r10, 0x1071
     mov r0, .press_any_key_string
-    call write_string
+    call write_string         ; * Clear Press any key message.
     send r10, 32
-    jmp .demo
+    jmp .demo                 ; * Start over.
 .bump_progress_bar:
     send r10, 0x20F0
-    send r10, r13
-    add r13, 1
-    send r10, [r12]
-    add r12, 1
+    send r10, r13             ; * r13 remembers the position of the last
+    add r13, 1                ;   character written to the progress bar.
+    send r10, [r12]           ; * r12 remembers the pointer to the last
+    add r12, 1                ;   character written to the progress bar.
     ret
 .string_formula:
-    %dw 0x200C, "A", 0x200F, "X**2+"
-    %dw 0x200E, "B", 0x200F, "X+"
-    %dw 0x200A, "C", 0x200F, "=0", 0
-.inputdata:
-    %dw 0x1030, 0x200C, "A", 0x200F, "=", 0
-    %dw 0x1040, 0x200E, "B", 0x200F, "=", 0
-    %dw 0x1050, 0x200A, "C", 0x200F, "=", 0
-    %dw 0
+    dw 0x200C, "A", 0x200F, "X**2+"
+    dw 0x200E, "B", 0x200F, "X+"
+    dw 0x200A, "C", 0x200F, "=0", 0
+.inputdata_prompt:
+    dw 0x1030, 0x200C, "A", 0x200F, "=", 0
+    dw 0x1040, 0x200E, "B", 0x200F, "=", 0
+    dw 0x1050, 0x200A, "C", 0x200F, "=", 0
+    dw 0
 .string_x1:
-    %dw 0x200F, "X1=", 0
+    dw 0x200F, "X1=", 0
 .string_x2:
-    %dw 0x200F, "X2=", 0
+    dw 0x200F, "X2=", 0
 .string_xc:
-    %dw 0x200F, "X=", 0
+    dw 0x200F, "X=", 0
 .string_xpm:
-    %dw 0x200F, " \181", 0
+    dw 0x200F, " \xB5", 0
+.string_xs:
+    dw 0x2007, "  (double root) ", 0
+.string_xn:
+    dw 0x2007, "  (no solution) ", 0
+.string_xl:
+    dw 0x2007, "  (linear case) ", 0
 .working_string:
-    %dw " Working... ", 0
+    dw " Hold on... ", 0
 .press_any_key_string:
-    %dw "Press any key", 0
+    dw "Press any key", 0
 
 
 
 
 global_str_buf:
-    %dw "              "      ; * Global string buffer for use with functions
+    dw "              "       ; * Global string buffer for use with functions
                               ;   that operate on strings. 14 cells. Don't
                               ;   worry, it's thread-safe.
 
@@ -473,11 +537,11 @@ float_from_string:
     mov r6, r2                ; * Multiply r2_32 by 10.
     mov r7, r3                ; * Basically the following happens:
     shl r6, 2                 ;   * r6_32 = r2_32,
-    shld r7, 2                ;   * r6_32 <<= 2,
+    scl r7, 2                 ;   * r6_32 <<= 2,
     add r2, r6                ;   * r2_32 += r6_32,
     adc r3, r7                ;   * r2_32 <<= 1.
     shl r2, 1                 ; * So in the end (r2_32 * (4 + 1)) * 2 or
-    shld r3, 1                ;   r2_32 * 10 is assigned to r2_32.
+    scl r3, 1                 ;   r2_32 * 10 is assigned to r2_32.
     add r2, r1                ; * Add r1 to r2_32, merging in the last digit.
     adc r3, 0
     sub r5, r9                ; * Decrement r5 if the dot has already been read.
@@ -547,6 +611,8 @@ float_from_string:
     add r9, 1                 ;   negative sign.
 .no_negate_exp:
 .parse_done:
+    mov r1, r8                ; * Load final sign into r1 for the early return
+    and r1, 0x8000            ;   code paths.
     mov r6, r8
     and r6, 0x0004
     add r4, r6                ; * Merge leading zero bit into r4.
@@ -577,7 +643,7 @@ float_from_string:
     jnz .shift_dbuffer_skip
     sub r4, r7                ; * This shifting of course affects the base-2
     shl r2, r7                ;   logarithm.
-    shld r3, r7
+    scl r3, r7
 .shift_dbuffer_skip:
     shr r7, 1
     jz .shift_dbuffer_done
@@ -596,7 +662,7 @@ float_from_string:
     adc r9, r7                ;   the base-10 exponent has to be increased by
 .no_mult_2_128:               ;   log10(2 ** 128).
     shr r7, 1
-    shrd r6, 1                ; * r6_32 is now log10(2) << 31.
+    scr r6, 1                 ; * r6_32 is now log10(2) << 31.
     test r9, r9
     jns .no_mult_2_64         ; * If the base-10 exponent is negative, quickly
     sub r4, 64                ;   divide the digit buffer by 2 ** 64 (through
@@ -619,11 +685,11 @@ float_from_string:
     mov r9, r11
 .ccl_success:
     shr r7, 1
-    shrd r6, 1
+    scr r6, 1
     shr r5, 1
     jnz .cordic_coarse_loop
     shl r8, 7                 ; * The base-10 exponent is now quite reduced,
-    shld r9, 7                ;   shifting it up gives us more precision.
+    scl r9, 7                 ;   shifting it up gives us more precision.
     push r0
     mov r0, 30                ; * Loop with 31 iterations (loop condition
 .cordic_fine_loop:            ;   is jnc).
@@ -642,12 +708,12 @@ float_from_string:
     mov r11, 0
 .cfl_no_shift16:
     shr r11, r1               ; * r10_32 is shifted down n bits.
-    shrd r10, r1
+    scr r10, r1
     add r2, r10               ; * And with this r2_32 is multiplied by (roughly)
     adc r3, r11               ;   1 + 2 ** (-n).
     jnc .cfl_success
     shr r3, 1
-    shrd r2, 1
+    scr r2, 1
     or r3, 0x8000             ; * Restore lost bit and increment base-2
     add r4, 1                 ;   logarithm if the addition yields a carry.
     jmp .cfl_success
@@ -656,11 +722,11 @@ float_from_string:
     mov r9, r11
 .cfl_success:
     shl r8, 1
-    shld r9, 1
+    scl r9, 1
     sub r0, 1
     jnc .cordic_fine_loop
     shr r3, 8                 ; * Shift digit buffer down by 8.
-    shrd r2, 8
+    scr r2, 8
     pop r0                    ; * Pop stuff saved earlier.
     pop r10
     pop r11
@@ -697,23 +763,23 @@ float_from_string:
     jz .result_is_inf         ;   positive, zero if it's negative.
     jmp .result_is_zero
 .cordic_table_low:
-    %dw 0xF62A, 0xF629, 0xF629, 0xF628 ; * Low words of log10(1 + 2 ** (-n))
-    %dw 0xF626, 0xF623, 0xF61C, 0xF60E ;   values with the MSB being
-    %dw 0xF5F2, 0xF5BB, 0xF54B, 0xF46D ;   2 ** (-32 - n), n ranging from
-    %dw 0xF2B0, 0xEF37, 0xE844, 0xDA5E ;   31 to 1.
-    %dw 0xBE93, 0x86FD, 0x17D3, 0x3985
-    %dw 0x7D05, 0x0473, 0x150C, 0x3D29
-    %dw 0xA8E4, 0xED49, 0x211D, 0xF256
-    %dw 0x53AC, 0x3071, 0x5116
+    dw 0xF62A, 0xF629, 0xF629, 0xF628 ; * Low words of log10(1 + 2 ** (-n))
+    dw 0xF626, 0xF623, 0xF61C, 0xF60E ;   values with the MSB being
+    dw 0xF5F2, 0xF5BB, 0xF54B, 0xF46D ;   2 ** (-32 - n), n ranging from
+    dw 0xF2B0, 0xEF37, 0xE844, 0xDA5E ;   31 to 1.
+    dw 0xBE93, 0x86FD, 0x17D3, 0x3985
+    dw 0x7D05, 0x0473, 0x150C, 0x3D29
+    dw 0xA8E4, 0xED49, 0x211D, 0xF256
+    dw 0x53AC, 0x3071, 0x5116
 .cordic_table_high:
-    %dw 0x3796, 0x3796, 0x3796, 0x3796 ; * High words of log10(1 + 2 ** (-n))
-    %dw 0x3796, 0x3796, 0x3796, 0x3796 ;   values with the MSB being
-    %dw 0x3796, 0x3796, 0x3796, 0x3796 ;   2 ** (-32 - n), n ranging from
-    %dw 0x3796, 0x3796, 0x3796, 0x3796 ;   31 to 1.
-    %dw 0x3796, 0x3796, 0x3796, 0x3795 ; * I desperately want to reduce the size
-    %dw 0x3793, 0x3790, 0x3789, 0x377B ;   of this table. Literally more than
-    %dw 0x375F, 0x3728, 0x36BD, 0x35EB ;   half of it is just 0x3796. Any ideas?
-    %dw 0x3461, 0x319E, 0x2D14
+    dw 0x3796, 0x3796, 0x3796, 0x3796 ; * High words of log10(1 + 2 ** (-n))
+    dw 0x3796, 0x3796, 0x3796, 0x3796 ;   values with the MSB being
+    dw 0x3796, 0x3796, 0x3796, 0x3796 ;   2 ** (-32 - n), n ranging from
+    dw 0x3796, 0x3796, 0x3796, 0x3796 ;   31 to 1.
+    dw 0x3796, 0x3796, 0x3796, 0x3795 ; * I desperately want to reduce the size
+    dw 0x3793, 0x3790, 0x3789, 0x377B ;   of this table. Literally more than
+    dw 0x375F, 0x3728, 0x36BD, 0x35EB ;   half of it is just 0x3796. Any ideas?
+    dw 0x3461, 0x319E, 0x2D14
 
 
 
@@ -758,8 +824,8 @@ float_to_string:
     mov r8, 0x40              ; * The coarse loop iterates 7 times. See exit
 .coarse_loop:                 ;   condition later.
     shr r7, 1                 ; * This loop basically gives an upper estimate of
-    shrd r6, 1                ;   the base-10 logarithm of the number by
-    shrd r5, 1                ;   reducing the base-2 exponent.
+    scr r6, 1                 ;   the base-10 logarithm of the number by
+    scr r5, 1                 ;   reducing the base-2 exponent.
     test r1, r8               ; * The base-10 exponent is stored as a fixed
     jz .cl_skip_bit           ;   point number with the LSB being 2 ** -41.
     add r2, r5
@@ -778,10 +844,10 @@ float_to_string:
     pop r6                    ; * Restore the mantissa into r6_32.
     pop r7
     shl r6, 4                 ; * Shift r6_32 up for use with the digit buffer
-    shld r7, 4                ;   loops later.
+    scl r7, 4                 ;   loops later.
     shl r2, 7                 ; * We discard the 7 MSB of the base-10 logarithm
-    shld r3, 7                ;   from r2_48, thus only leaving the fraction
-    shld r4, 7                ;   part in it.
+    scl r3, 7                 ;   from r2_48, thus only leaving the fraction
+    scl r4, 7                 ;   part in it.
 .db_preshift_loop:            ; * The idea is that we take the fraction part of
     cmp r4, 0x6099            ;   the base-10 logarithm later and reduce it to 0
     jnae .db_preshift_done    ;   while also adjusting the digit buffer, much
@@ -789,7 +855,7 @@ float_to_string:
     sbb r3, 0x4D42            ; * One problem is that the CORDIC table used
     sbb r4, 0x4D10            ;   there can only reduce the base-10 logarithm
     shl r6, 1                 ;   by log10(2.384) or so which is about 0.377.
-    shld r7, 1                ; * The fraction part of the base-10 logarithm may
+    scl r7, 1                 ; * The fraction part of the base-10 logarithm may
     jmp .db_preshift_loop     ;   be anywhere in the range [0; 1). Multiplying
 .db_preshift_done:            ;   the digit buffer by 2 and subtracting log10(2)
                               ;   from the base-10 is one way of getting it
@@ -819,7 +885,7 @@ float_to_string:
     mov r11, 0
 .cfl_no_shift16:
     shr r11, r1               ; * r10_32 is shifted down n bits.
-    shrd r10, r1
+    scr r10, r1
     add r6, r10               ; * And with this r6_32 is multiplied by (roughly)
     adc r7, r11               ;   1 + 2 ** (-n).
     jmp .cfl_success
@@ -828,7 +894,7 @@ float_to_string:
     mov r4, r9
 .cfl_success:
     shl r3, 1
-    shld r4, 1
+    scl r4, 1
     sub r2, 1
     jnc .cordic_fine_loop
     pop r10
@@ -850,17 +916,17 @@ float_to_string:
     mov r3, r7                ; * Extract MSD from digit buffer,
     shr r3, 11                ;   push it into the BCD buffer.
     shl r8, 4
-    shld r9, 4
+    scl r9, 4
     or r8, r3
     and r7, 0x7FF             ; * Discard MSD.
     mov r3, r6                ; * Multiply r6_32 by 10.
     mov r4, r7                ; * Basically the following happens:
     shl r3, 2                 ;   * r3_32 = r6_32,
-    shld r4, 2                ;   * r3_32 <<= 2,
+    scl r4, 2                 ;   * r3_32 <<= 2,
     add r6, r3                ;   * r6_32 += r3_32,
     adc r7, r4                ;   * r6_32 <<= 1.
     shl r6, 1                 ; * So in the end (r6_32 * (4 + 1)) * 2 or
-    shld r7, 1                ;   r6_32 * 10 is assigned to r6_32.
+    scl r7, 1                 ;   r6_32 * 10 is assigned to r6_32.
     sub r2, 1
     jnz .extract_bcd_loop
     add r8, 0x6666            ; * Rig BCD buffer so that when 1 is added,
@@ -910,7 +976,7 @@ float_to_string:
     mov r2, 0                 ;   scientific notation if that is not the case.
     sub r2, r3                ; * If it is though, it's only a matter of
     shr r9, r2                ;   adding leading zeroes to the BCD buffer and
-    shrd r8, r2               ;   rigging r5 so that it reflects the shift.
+    scr r8, r2                ;   rigging r5 so that it reflects the shift.
     mov r5, 0
 .emit_default:                ; * If r5 falls in the range [0; 6], the decimal
     sub r4, r5                ;   dot is simply shifted to the right. This is
@@ -919,12 +985,12 @@ float_to_string:
                               ;   printed and r4 decreased by r5.
 .emit_scientific:             ; * In the end scientific notation is used in all
     shl r8, 4                 ;   cases, it's just rigged by shifted decimal
-    shld r9, 4                ;   dots, leading zeroes and disabled exponents.
+    scl r9, 4                 ;   dots, leading zeroes and disabled exponents.
     mov r2, 7                 ; * The BCD emit loop iterates 7 times.
 .emit_bcd_loop:
     mov r3, r9                ; * Extract digit from BCD, shift BCD up.
     shl r8, 4
-    shld r9, 4
+    scl r9, 4
     shr r3, 12
     add r3, 0x30              ; * That's a '0'.
     mov [r0], r3              ; * Store ASCII-coded digit, bump output pointer.
@@ -1086,13 +1152,13 @@ float_add:
 .no_adjust_r2_32_16:
     sub r5, 1
     shr r3, r5                ; * Shift the smaller number down appropriately.
-    shrd r2, r5
+    scr r2, r5
     mov r5, r2                ; * Add last bit shifted out back so as to
     and r5, 1                 ;   mitigate precision loss.
     add r2, r5
     adc r3, 0
     shr r3, 1
-    shrd r2, 1
+    scr r2, 1
 .no_adjust_r2_32:
     test r8, r8
     js .do_subtraction
@@ -1101,7 +1167,7 @@ float_add:
     test r1, 0x0100           ; * Check overflow, shift buffer down, increment
     jz .skip_subtraction      ;   base-2 logarithm if it happens.
     shr r1, 1
-    shrd r0, 1
+    scr r0, 1
     add r7, 0x0080
     cmp r7, 0x7F80                   ; * Check overflow of the base-2 logarithm,
     je float_epilogue.result_is_inf  ;   store inf if it happens.
@@ -1114,14 +1180,14 @@ float_add:
     sbb r1, r3
     jnz .no_initial_shift_8
     shl r0, 8
-    shld r1, 8
+    scl r1, 8
     add r8, 8
 .no_initial_shift_8:
 .shift_down_loop:             ; * Shift r0_32 up until the implicit leading one
     test r1, r5               ;   bit (0x0080) is set in r1, accumulate amount
     jnz .no_shift_down        ;   of shifts in r8.
     shl r0, r9
-    shld r1, r9
+    scl r1, r9
     add r8, r9
 .no_shift_down:
     shr r9, 1
@@ -1201,7 +1267,7 @@ float_multiply:
     mov [.cache_3_low], r0
     mov [.cache_3_high], r1
     shl r0, 1
-    shld r1, 1
+    scl r1, 1
     mov [.cache_2_low], r0
     mov [.cache_2_high], r1
     add [.cache_3_low], r0
@@ -1219,7 +1285,7 @@ float_multiply:
     shr r2, 2
     mov r8, r0                ; * The 2 LSB of r0_32 are discarded, but 1 bit is
     shr r1, 2                 ;   folded back in so as to mitigate precision
-    shrd r0, 2                ;   loss.
+    scr r0, 2                 ;   loss.
     shr r8, 1
     and r8, 0x0001
     add r0, r8
@@ -1238,7 +1304,7 @@ float_multiply:
     jz .multiply_loop_high_done
     mov r8, r0                ; * The 2 LSB of r0_32 are discarded, but 1 bit is
     shr r1, 2                 ;   folded back in so as to mitigate precision
-    shrd r0, 2                ;   loss.
+    scr r0, 2                 ;   loss.
     shr r8, 1
     and r8, 0x0001
     add r0, r8
@@ -1249,7 +1315,7 @@ float_multiply:
 .multiply_loop_high_done:
     mov r8, r0                ; * The LSB of r0_32 is discarded, but 1 bit is
     shr r1, 1                 ;   folded back in so as to mitigate precision
-    shrd r0, 1                ;   loss.
+    scr r0, 1                 ;   loss.
     and r8, 0x0001
     add r0, r8
     adc r1, 0
@@ -1263,14 +1329,14 @@ float_multiply:
     and r1, 0x007F            ; * Discard implicit leading one.
     or r1, r5                 ; * Merge base-2 logarithm back.
     jmp float_epilogue.encode_and_exit
-.cache_0_low: %dw 0
-.cache_1_low: %dw 0
-.cache_2_low: %dw 0
-.cache_3_low: %dw 0
-.cache_0_high: %dw 0
-.cache_1_high: %dw 0
-.cache_2_high: %dw 0
-.cache_3_high: %dw 0
+.cache_0_low: dw 0
+.cache_1_low: dw 0
+.cache_2_low: dw 0
+.cache_3_low: dw 0
+.cache_0_high: dw 0
+.cache_1_high: dw 0
+.cache_2_high: dw 0
+.cache_3_high: dw 0
 
 
 
@@ -1302,10 +1368,10 @@ float_divide:
 .r2_32_is_not_nan:
     jmp [r5+.infnan_jump_able]
 .infnan_jump_able:
-    %dw .result_default                ; * Return (-)(x/y) for (-)x/(-)y
-    %dw float_epilogue.result_is_inf        ; * Return (-)0 for (-)inf/(-)y
-    %dw float_epilogue.result_is_zero       ; * Return (-)0 for (-)x/(-)inf
-    %dw float_epilogue.result_is_nan        ; * Return nan for (-)inf/(-)inf
+    dw .result_default                ; * Return (-)(x/y) for (-)x/(-)y
+    dw float_epilogue.result_is_inf   ; * Return (-)0 for (-)inf/(-)y
+    dw float_epilogue.result_is_zero  ; * Return (-)0 for (-)x/(-)inf
+    dw float_epilogue.result_is_nan   ; * Return nan for (-)inf/(-)inf
 .result_default:
     mov r5, r1
     mov r6, r3
@@ -1324,7 +1390,7 @@ float_divide:
     je .mantissas_match
     sub r5, 0x80              ; * We shift the dividend up as the divisor is
     shl r0, 1                 ;   greater and the quotient would have a leading
-    shld r1, 1                ;   zero Otherwise.
+    scl r1, 1                 ;   zero Otherwise.
     jmp .skip_shift
 .mantissas_match:
     or r4, 1
@@ -1344,7 +1410,7 @@ float_divide:
     mov r7, 0x40
 .division_loop:
     shl r0, 1                 ; * The usual shift-and-add loop. Shift dividend
-    shld r1, 1                ;   up, see if we can subtract the divisor,
+    scl r1, 1                 ;   up, see if we can subtract the divisor,
     mov r4, r0                ;   don't write back the different if we can't,
     mov r5, r1                ;   set a bit in the quotient if we can.
     sub r4, r2
@@ -1371,7 +1437,7 @@ float_divide:
     mov r8, 0
 .skip_pop:
     shl r0, 1                 ; * Mitigate precision loss.
-    shld r1, 1
+    scl r1, 1
     cmp r0, r2
     cmb r1, r3
     jb .skip_bump
@@ -1414,7 +1480,7 @@ float_sqrt:
     and r7, 0x007F
     or r7, 0x0080
     shl r6, 7                 ; * Shift mantissa up by 23 bits.
-    shld r7, 7
+    scl r7, 7
     mov r3, r1
     and r3, 0x7F80            ; * Extract base-2 logarithm of input.
     sub r3, 0x3F80
@@ -1422,7 +1488,7 @@ float_sqrt:
     jz .skip_shift_up
     sub r3, 0x80
     shl r6, 1
-    shld r7, 1
+    scl r7, 1
 .skip_shift_up:
     cmp r3, -0x3F80           ; * Check for underflow.
     jle float_epilogue.result_is_zero
@@ -1458,8 +1524,8 @@ float_sqrt:
     mov r8, 0                 ;           }
 .skip_restore:                ;           res >>= 1;
     shr r2, 1                 ;           if (flag)
-    shrd r1, 1                ;           {
-    shrd r0, 1                ;               res += bit;
+    scr r1, 1                 ;           {
+    scr r0, 1                 ;               res += bit;
     test r8, 1                ;           }
     jz .skip_add              ;           bit >>= 2;
     add r0, [sp]              ;       }
@@ -1467,8 +1533,8 @@ float_sqrt:
     adc r2, [sp+2]            ;   }
 .skip_add:                    ;
     shr [sp+2], 2             ; * It just sort of works. It's terribly
-    shrd [sp+1], 2            ;   unoptimised but it does what it's supposed to.
-    shrd [sp], 2
+    scr [sp+1], 2             ;   unoptimised but it does what it's supposed to.
+    scr [sp], 2
     sub r9, 1
     jnz .loop
     add sp, 3                 ; * Pop running bit off the stack.
@@ -1476,7 +1542,7 @@ float_sqrt:
     jz .skip_shift_down
     add r3, 0x80
     shr r1, 1
-    shrd r0, 1
+    scr r0, 1
 .skip_shift_down:
     and r1, 0x007F
     add r3, 0x3F80

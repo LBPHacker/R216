@@ -1,540 +1,831 @@
-local args = {...}
+-- * This is a really ugly assembler. I wanted to write a much better one for
+--   the R2, but I didn't have the time. Or, rather, I would have had to
+--   postpone publishing the R2. I really, really didn't want to do that, so
+--   much that I made peace with having to write a bad assembler instead.
+--        -- LBPHacker
 
+-- * `source_path` is, unsurprisingly enough, the path to the assembly source.
+-- * `target_cpu_id` is a FILT ctype used to select which CPU to upload the
+--   program to; all my computers have a QRTZ particle whose ctype is
+--   0x1864A205, and on the right of this is a row of FILT that stores in ctype
+--   the model number of the CPU in a zero-terminated ASCII string, which the
+--   assembler looks for; if it finds more than one supported CPU in the
+--   simulation, it reads the ctype of the FILT particle on the *left* of this
+--   QRTZ particle and matches it against `target_cpu_id`.
+-- * `log_path` is the path to the file the log should be redirected to.
+local source_path, target_cpu_id, log_path = ...
+
+local redirect_log
+
+-- * Shadow print. This forces me to use one of the functions defined below.
+local print_ = print
+local function print_log(sugar, no_sugar, str)
+    if redirect_log then
+        redirect_log:write(no_sugar .. str .. "\n")
+    else
+        print_(sugar .. str)
+    end
+end
+local function print_e(...)
+    print_log("\008l[r2asm] \008w", "[r2asm] ", string.format(...))
+end
+local function print_w(...)
+    print_log("\008o[r2asm] \008w", "[r2asm] ", string.format(...))
+end
+local function print_i(...)
+    print_log("\008t[r2asm] \008w", "[r2asm] ", string.format(...))
+end
+local print = nil
+
+if log_path then
+    local handle, err = io.open(log_path, "w")
+    if handle then
+        redirect_log = handle
+    else
+        print_w("failed redirect log: %s", err)
+    end
+end
+
+-- I don't care that ipairs is deprecated. Using ipairs is way more concise than
+-- the whole for x = 1, # do ... end dance where every time I need the thing at
+-- index x I must use [x]. Chances are I end up caching it into a local anyway
+-- and then I might as well just use a damn iterator.
+local function ipairs(tbl_param)
+    return function(tbl, idx)
+        idx = (idx or 0) + 1
+        if #tbl >= idx then
+            return idx, tbl[idx]
+        end
+    end, tbl_param
+end
+
+
+-- * Supported model and flash mode table with some info about how each model
+--   has to be programmed.
+local supported_models = {
+    ["R216K2A"] = {
+        flash_mode = "skip_one_rtl",
+        ram_x = 70,
+        ram_y = -99,
+        ram_width = 128,
+        ram_height = 16
+    }
+}
+local supported_flash_modes = {
+    ["skip_one_rtl"] = function(anchor, model, code)
+        local handle = io.open("r2.2.dump", "w")
+        for ix = 1, #code do
+            handle:write(("0x%08X\n"):format(code[ix]))
+        end
+        handle:close()
+
+
+        -- * The skip_one_rtl mode writes to the RAM from left to right, top to
+        --   bottom when a row is filled. Due to the way some RAMs work, this
+        --   mode tolerates if at most one particle is missing from the row.
+
+        local model_data = supported_models[model]
+        if #code > model_data.ram_width * model_data.ram_height then
+            print_e("code size exceeds RAM capacity")
+            return
+        end
+
+        -- * Pad remaining cells with 0x20000000.
+        for ix = #code + 1, model_data.ram_width * model_data.ram_height do
+            table.insert(code, 0x20000000)
+        end
+
+        -- * `row` and `column` index the RAM cells, `cursor` the `code` array.
+        local row, column = 0, 0
+        local cursor = 0
+        local skipped = 0
+        local x, y = sim.partPosition(anchor)
+        x, y = x + model_data.ram_x, y + model_data.ram_y
+        while cursor < #code do
+            cursor = cursor + 1
+            local filt_id
+            while not filt_id do
+                filt_id = sim.partID(x - column, y + row)
+                if filt_id then
+                    if sim.partProperty(filt_id, "type") ~=
+                        elem.DEFAULT_PT_FILT then
+                        filt_id = nil
+                    end
+                end
+                if not filt_id then
+                    column = column + 1
+                    skipped = skipped + 1
+                    if skipped > 1 then
+                        print_e("missing FILT particle in row %i", row)
+                        return
+                    end
+                end
+            end
+            sim.partProperty(filt_id, "ctype", code[cursor])
+            column = column + 1
+            if cursor % model_data.ram_width == 0 then
+                row = row + 1
+                column = 0
+                skipped = 0
+            end
+        end
+
+        -- * Flashing succeeded.
+        return true
+    end
+}
+
+-- * Huge operation and operand tables.
+local mnemonic_to_class = {
+    ["adc" ] = {code = 0x25000000, class =  "2"},
+    ["adcs"] = {code = 0x2D000000, class =  "2"},
+    ["add" ] = {code = 0x24000000, class =  "2"},
+    ["adds"] = {code = 0x2C000000, class =  "2"},
+    ["and" ] = {code = 0x21000000, class =  "2"},
+    ["bump"] = {code = 0x38000000, class =  "1"},
+    ["call"] = {code = 0x3E000000, class = "1*"},
+    ["cmb" ] = {code = 0x2F000000, class =  "2"},
+    ["cmp" ] = {code = 0x2E000000, class =  "2"},
+    ["hlt" ] = {code = 0x30000000, class =  "0"},
+    ["ja"  ] = {code = 0x3100000F, class = "1*"},
+    ["jae" ] = {code = 0x31000003, class = "1*"},
+    ["jb"  ] = {code = 0x31000002, class = "1*"},
+    ["jbe" ] = {code = 0x3100000E, class = "1*"},
+    ["jc"  ] = {code = 0x31000002, class = "1*"},
+    ["je"  ] = {code = 0x31000008, class = "1*"},
+    ["jg"  ] = {code = 0x3100000B, class = "1*"},
+    ["jge" ] = {code = 0x3100000D, class = "1*"},
+    ["jl"  ] = {code = 0x3100000C, class = "1*"},
+    ["jle" ] = {code = 0x3100000A, class = "1*"},
+    ["jmp" ] = {code = 0x31000000, class = "1*"},
+    ["jn"  ] = {code = 0x31000001, class = "1*"},
+    ["jna" ] = {code = 0x3100000E, class = "1*"},
+    ["jnae"] = {code = 0x31000002, class = "1*"},
+    ["jnb" ] = {code = 0x31000003, class = "1*"},
+    ["jnbe"] = {code = 0x3100000F, class = "1*"},
+    ["jnc" ] = {code = 0x31000003, class = "1*"},
+    ["jne" ] = {code = 0x31000009, class = "1*"},
+    ["jng" ] = {code = 0x3100000A, class = "1*"},
+    ["jnge"] = {code = 0x3100000C, class = "1*"},
+    ["jnl" ] = {code = 0x3100000D, class = "1*"},
+    ["jnle"] = {code = 0x3100000B, class = "1*"},
+    ["jno" ] = {code = 0x31000005, class = "1*"},
+    ["jns" ] = {code = 0x31000007, class = "1*"},
+    ["jnz" ] = {code = 0x31000009, class = "1*"},
+    ["jo"  ] = {code = 0x31000004, class = "1*"},
+    ["js"  ] = {code = 0x31000006, class = "1*"},
+    ["jz"  ] = {code = 0x31000008, class = "1*"},
+    ["mov" ] = {code = 0x20000000, class =  "2"},
+    ["nop" ] = {code = 0x31000001, class =  "0"},
+    ["or"  ] = {code = 0x22000000, class =  "2"},
+    ["ors" ] = {code = 0x2A000000, class =  "2"},
+    ["pop" ] = {code = 0x3D000000, class =  "1"},
+    ["push"] = {code = 0x3C000000, class = "1*"},
+    ["recv"] = {code = 0x3B000000, class =  "2"},
+    ["ret" ] = {code = 0x3F000000, class =  "0"},
+    ["rol" ] = {code = 0x32000000, class =  "2"},
+    ["ror" ] = {code = 0x33000000, class =  "2"},
+    ["sbb" ] = {code = 0x27000000, class =  "2"},
+    ["send"] = {code = 0x3A000000, class =  "2"},
+    ["shl" ] = {code = 0x34000000, class =  "2"},
+    ["scl" ] = {code = 0x36000000, class =  "2"},
+    ["shr" ] = {code = 0x35000000, class =  "2"},
+    ["scr" ] = {code = 0x37000000, class =  "2"},
+    ["sub" ] = {code = 0x26000000, class =  "2"},
+    ["swm" ] = {code = 0x28000000, class = "1*"},
+    ["test"] = {code = 0x29000000, class =  "2"},
+    ["wait"] = {code = 0x39000000, class =  "1"},
+    ["xor" ] = {code = 0x23000000, class =  "2"},
+    ["xors"] = {code = 0x2B000000, class =  "2"},
+}
+local class_to_modes = {
+    ["0"] = {
+        {pattern = {},                                      code = 0x00000000},
+    },
+    ["1"] = {
+        {pattern = {"r0"},                                  code = 0x00000000},
+        {pattern = {"[", "r0", "]"},                        code = 0x00400000},
+        {pattern = {"[", "r16", "+", "r0", "]"},            code = 0x00C00000},
+        {pattern = {"[", "r16", "-", "r0", "]"},            code = 0x00C08000},
+        {pattern = {"[", "64", "]"},                        code = 0x00500000},
+        {pattern = {"[", "14", "+", "r16", "]"},            code = 0x00D00000},
+        {pattern = {"[", "r16", "+", "14", "]"},            code = 0x00D00000},
+        {pattern = {"[", "r16", "-", "14", "]"},            code = 0x00D08000},
+    },
+    ["1*"] = {
+        {pattern = {"r4"},                                  code = 0x00000000},
+        {pattern = {"[", "r4", "]"},                        code = 0x00100000},
+        {pattern = {"[", "r16", "+", "r4", "]"},            code = 0x00900000},
+        {pattern = {"[", "r16", "-", "r4", "]"},            code = 0x00908000},
+        {pattern = {"64"},                                  code = 0x00200000},
+        {pattern = {"[", "64", "]"},                        code = 0x00300000},
+        {pattern = {"[", "14", "+", "r16", "]"},            code = 0x00B00000},
+        {pattern = {"[", "r16", "+", "14", "]"},            code = 0x00B00000},
+        {pattern = {"[", "r16", "-", "14", "]"},            code = 0x00B08000},
+    },
+    ["2"] = {
+        {pattern = {"r0", ",", "r4"},                       code = 0x00000000},
+        {pattern = {"r0", ",", "[", "r4", "]"},             code = 0x00100000},
+        {pattern = {"r0", ",", "[", "r16", "+", "r4", "]"}, code = 0x00900000},
+        {pattern = {"r0", ",", "[", "r16", "-", "r4", "]"}, code = 0x00908000},
+        {pattern = {"r0", ",", "64"},                       code = 0x00200000},
+        {pattern = {"r0", ",", "[", "64", "]"},             code = 0x00300000},
+        {pattern = {"r0", ",", "[", "14", "+", "r16", "]"}, code = 0x00B00000},
+        {pattern = {"r0", ",", "[", "r16", "+", "14", "]"}, code = 0x00B00000},
+        {pattern = {"r0", ",", "[", "r16", "-", "14", "]"}, code = 0x00B08000},
+        {pattern = {"[", "r0", "]", ",", "r4"},             code = 0x00400000},
+        {pattern = {"[", "r16", "+", "r0", "]", ",", "r4"}, code = 0x00C00000},
+        {pattern = {"[", "r16", "-", "r0", "]", ",", "r4"}, code = 0x00C08000},
+        {pattern = {"[", "64", "]", ",", "r0"},             code = 0x00500000},
+        {pattern = {"[", "14", "+", "r16", "]", ",", "r0"}, code = 0x00D00000},
+        {pattern = {"[", "r16", "+", "14", "]", ",", "r0"}, code = 0x00D00000},
+        {pattern = {"[", "r16", "-", "14", "]", ",", "r0"}, code = 0x00D08000},
+        {pattern = {"[", "r0", "]", ",", "64"},             code = 0x00600000},
+        {pattern = {"[", "r16", "+", "r0", "]", ",", "14"}, code = 0x00E00000},
+        {pattern = {"[", "r16", "-", "r0", "]", ",", "14"}, code = 0x00E08000},
+        {pattern = {"[", "64", "]", ",", "40"},             code = 0x00700000},
+        {pattern = {"[", "14", "+", "r16", "]", ",", "40"}, code = 0x00F00000},
+        {pattern = {"[", "r16", "+", "14", "]", ",", "40"}, code = 0x00F00000},
+        {pattern = {"[", "r16", "-", "14", "]", ",", "40"}, code = 0x00F08000},
+    },
+}
+local register_to_name = {
+    [ "r0"] =  0, [ "r1"] =  1, [ "r2"] =  2, [ "r3"] =  3,
+    [ "r4"] =  4, [ "r5"] =  5, [ "r6"] =  6, [ "r7"] =  7,
+    [ "r8"] =  8, [ "r9"] =  9, ["r10"] = 10, ["r11"] = 11,
+    ["r12"] = 12, ["r13"] = 13, ["r14"] = 14, ["r15"] = 15,
+                  [ "bp"] = 13, [ "sp"] = 14, [ "ip"] = 15,
+}
+
+local function get_cpu()
+
+    -- * Store the ids of anchors that match both the model number and the CPU
+    --   id. If there ends up being more than one, we'll bail out later.
+    local anchors_found = {}
+    for partID in sim.parts() do
+
+        -- * Look for the QRTZ particle with a ctype of 0x1864A205.
+        -- * Check ctype first as it's more unlikely to find a particle with
+        --   this ctype than to find a QRTZ particle.
+        if  sim.partProperty(partID, "ctype") == 0x1864A205
+        and sim.partProperty(partID, "type") == elem.DEFAULT_PT_QRTZ then
+            local x, y = sim.partPosition(partID)
+
+            -- * Extract the model number.
+            -- * `model_number` will only get assigned a proper value if the
+            --   extraction succeeds, i.e. the string in the row of particles is
+            --   zero-terminated. Extraction also fails if particles are
+            --   missing. I don't care if the row is not made from FILT though.
+            local model_number
+            do
+                local mn_probably = ""
+                local mn_x, mn_y = x, y
+                while true do
+                    -- * Check the next particle in the row.
+                    mn_x = mn_x + 1
+                    local mn_id = sim.partID(mn_x, mn_y)
+                    if not mn_id then
+
+                        -- * Bail out without assigning anything to
+                        --   `model_number` if the row ends earlier than
+                        --   expected.
+                        break
+                    end
+                    local mn_ct = sim.partProperty(mn_id, "ctype") % 0x100
+                    if mn_ct == 0 then
+
+                        -- * Assign buffer to `model_number` if the row ends
+                        --   properly, in a null-terminator.
+                        model_number = mn_probably
+                        break
+                    end
+
+                    -- * Append byte to buffer.
+                    mn_probably = mn_probably .. string.char(mn_ct)
+                end
+            end
+
+            -- * Look for the particle on the left with the CPU's id. I don't
+            --   really care if it's not a FILT. There must be a particle
+            --   though.
+            local cpu_id
+            do
+                local cid_id = sim.partID(x - 1, y)
+                if cid_id then
+                    cpu_id = sim.partProperty(cid_id, "ctype")
+                end
+            end
+
+            -- * Save anchor id if both the model number and the CPU id match.
+            if  supported_models[model_number]
+            and (not target_cpu_id or cpu_id == target_cpu_id) then
+                anchors_found[partID] = model_number
+            end
+        end
+    end
+
+    -- * Bail out if no CPU matched.
+    if not next(anchors_found) then
+        print_e("no supported CPU detected in the simulation")
+        if target_cpu_id then
+            print_i("(or none match the CPU id supplied)")
+        end
+        return
+    end
+
+    -- * Bail out if multiple CPUs matched.
+    if next(anchors_found, next(anchors_found)) then
+        print_e("more than one supported CPUs detected in the simulation")
+        if not target_cpu_id then
+            print_i("maybe try supplying a CPU id?")
+        end
+        return
+    end
+
+    -- * Continue if only one CPU matched.
+    return next(anchors_found)
+end
+
+local function assemble_source()
+
+    local errors_encountered = false
+    local function print_el(line, ...)
+        print_e("line %i: %s", line, string.format(...))
+        errors_encountered = true
+    end
+    local function print_wl(line, ...)
+        print_w("line %i: %s", line, string.format(...))
+    end
+
+    -- * The `lines` table stores tables with the following fields:
+    --   * str: the string of characters in the original source constituting the
+    --          line,
+    --   * global_label: the name of the last global label
+    local lines = {}
+    -- * The `labels` table maps label names to line numbers.
+    local labels = {}
+    -- * Should be pretty obvious.
+    local line_to_offset = {}
+    -- * The `literals` table maps unique identifiers to single and double quote
+    --   strings. These need to be removed so comments can be eliminated easily.
+    local literals = {}
+    -- * A table with keys pointing to lines where one or more immediate values
+    --   have been truncated. A bunch of warnings are issued from this table
+    --   after the label patch pass.
+    local truncated = {}
+    -- * A table with machine code offsets for keys and {label, width, shift}
+    --   triples for values. The label patch pass uses this to patch the machine
+    --   code with label addresses and possibly emit more truncation warnings.
+    local patch_label = {}
+        
+    -- * Bunch of operand matching functions. I was too lazy to write a proper
+    --   tokenizer. Told you, it's a bad assembler.
+    local function match_register(operands_str)
+        local register, remainder = operands_str:match("^%s*(%w+)%s*(.*)%s*$")
+        if not register then
+            return
+        end
+        -- * Needed due to the case-insensitive nature of assembly.
+        local register_name = register_to_name[register:lower()]
+        if not register_name then
+            return
+        end
+        return register_name, remainder
+    end
+    local function match_imm_impl(operands_str, line)
+        local immval, remainder = operands_str:match(
+            "^%s*([%-%w._']+)%s*(.*)%s*$")
+        if not immval then
+            return
+        end
+        -- * Try to match a number. This will accept both decimal and
+        --   hexadecimal integers. Range checks are not done here.
+        local number = tonumber(immval)
+        if number then
+            return number, remainder
+        end
+        -- * The immediate still may be a label name.
+        local label_name = immval:match("^%.?[%a_][%w_]*$")
+        if not label_name then
+            label_name = immval:match("^[%a_][%w_]*%.[%a_][%w_]*$")
+        end
+        if mnemonic_to_class[label_name] or register_to_name[label_name] then
+            return
+        end
+        if label_name then
+            -- * Return 0, patch label address later.
+            return 0, remainder, label_name
+        end
+        -- * The immediate still may be a literal.
+        local lit_idx, remainder = operands_str:match("^%s*'(%d+)'%s*(.*)%s*$")
+        lit_idx = tonumber(lit_idx)
+        if not lit_idx then
+            return
+        end
+        local literal_value = 0
+        local literal_data = literals[lit_idx].data
+        if #literal_data == 0 then
+            print_w(line, "empty literal, assuming \\0")
+        end
+        -- * Convert at most 4 bytes (no idea what use that'd be but meh).
+        for ix = 1, math.min(4, #literal_data) do
+            literal_value = literal_value * 0x100 + literal_data:byte(ix)
+        end
+        return literal_value, remainder
+    end
+    local function match_imm(operands_str, width, offset, line, shift)
+        local number, remainder, label = match_imm_impl(operands_str, line)
+        if not number then
+            return
+        end
+        local sane_number = math.floor(number) % (2 ^ width)
+        if number ~= sane_number then
+            if not (width == 16
+                and number >= -32768
+                and number + 0x10000 == sane_number) then
+                truncated[line] = width
+            end
+        end
+        -- * Queue for later patching.
+        if label then
+            patch_label[offset] = {
+                label = label,
+                width = width,
+                shift = shift,
+                invoker = line
+            }
+        end
+        return sane_number, remainder
+    end
+    local function match_punctuator(operands_str, punctuator)
+        local nonspace, remainder = operands_str:match("^%s*(%S)%s*(.*)%s*$")
+        if nonspace ~= punctuator then
+            return
+        end
+        return remainder
+    end
+    local function match_dw_string(operands, line)
+        local lit_idx, remainder = operands:match("^%s*\"(%d+)\"%s*(.*)%s*$")
+        lit_idx = tonumber(lit_idx)
+        if not lit_idx then
+            return
+        end
+        return literals[lit_idx].data, remainder
+    end
+
+    -- * Utility function to substitute operands into operand mode patterns.
+    local function match_operand_mode(operands, offset, line, mode)
+        local code = mode.code
+        for ix_token, token in ipairs(mode.pattern) do
+            if #token == 1 then
+                operands = match_punctuator(operands, token)
+            else
+                local bits
+                local pos = tonumber(token:sub(2))
+                if token:find("^r") then
+                    bits, operands = match_register(operands, token)
+                elseif token:find("^6") then
+                    bits, operands = match_imm(operands, 16, offset, line, pos)
+                elseif token:find("^1") then
+                    bits, operands = match_imm(operands, 11, offset, line, pos)
+                elseif token:find("^4") then
+                    bits, operands = match_imm(operands, 4, offset, line, pos)
+                end
+                if bits then
+                    code = code + bits * 2 ^ pos
+                end
+            end
+            if not operands then
+                return
+            end
+        end
+        if operands:match("^%s*$") then
+            return code
+        end
+    end
+
+    -- * Try to load the source first, bail out if we can't.
+    local source
+    do
+        local handle, err = io.open(source_path, "r")
+        if not handle then
+            print_e("failed to open source: %s", err)
+            return
+        end
+        source = handle:read("*a"):gsub("\r\n?", "\n")
+        handle:close()
+    end
+
+    -- * Extract lines and labels from source.
+    do
+        local last_global_label = false
+        local ix_line = 0
+        for line in (source .. "\n"):gmatch("([^\n]*)\n") do
+            ix_line = ix_line + 1
+
+            -- * Move literals to `literals` and eliminate comments.
+            line = line:gsub("\"([^\"]*)\"", function(cap)
+                table.insert(literals, {
+                    data = cap,
+                    line = ix_line
+                })
+                return "\"" .. #literals .. "\""
+            end):gsub("'([^']*)'", function(cap)
+                table.insert(literals, {
+                    data = cap,
+                    line = ix_line
+                })
+                return "'" .. #literals .. "'"
+            end):gsub(";.*$", "")
+
+            -- * Process labels, update `last_global_label` if needed.
+            line = line:gsub("%s*(%.?[%a_][%w_]*)%s*:", function(cap)
+                local label_name
+                if cap:find("^%.") then
+                    -- * Handle local labels.
+                    if last_global_label then
+                        label_name = last_global_label .. cap
+                    else
+                        print_el(line, "local label without global label")
+                    end
+                else
+                    -- * Handle global labels.
+                    label_name = cap
+                    last_global_label = label_name
+                end
+                if label_name then
+                    -- * Map label name to line number.
+                    labels[label_name] = ix_line
+                end
+                -- * Eliminate label from line.
+                return ""
+            end)
+
+            table.insert(lines, {
+                str = line,
+                global_label = last_global_label
+            })
+        end
+    end
+
+    -- * Handle escape sequences in literals.
+    for ix_literal, literal in ipairs(literals) do
+        literals[ix_literal].data = literal.data
+            :gsub("\\a", "\a")
+            :gsub("\\b", "\b")
+            :gsub("\\f", "\f")
+            :gsub("\\n", "\n")
+            :gsub("\\r", "\r")
+            :gsub("\\t", "\t")
+            :gsub("\\v", "\v")
+            :gsub("\\x(.?.?)", function(cap)
+                local code = #cap == 2 and tonumber(cap, 16)
+                if not code then
+                    print_el(literal.line, "invalid escape sequence \\x%s", cap)
+                    return "\\x" .. cap
+                end
+                return string.char(code)
+            end)
+            :gsub("\\(%d%d?%d?)", function(cap)
+                local code = tonumber(cap)
+                if code > 255 then
+                    print_el(literal.line, "invalid escape sequence \\%s", cap)
+                    return "\\" .. cap
+                end
+                return string.char(code)
+            end)
+            :gsub("\\.", function(cap)
+                print_el(literal.line, "invalid escape sequence %s", cap)
+                return cap
+            end)
+            :gsub("\\\\", "\\")
+    end
+
+    local machine_code = {}
+    -- * Small utility functions that manage the `machine_code` table.
+    local commit_value, pad_holes
+    do
+        local max_pos = 0
+        function commit_value(pos, value)
+            -- * `pos` is a 0-based index, `value` is the value to be written to
+            --   the cell indexed by `pos`.
+            pos = pos + 1
+            machine_code[pos] = value
+            if max_pos < pos then
+                max_pos = pos
+            end
+        end
+        function pad_holes()
+            -- * Pad holes with 0x20000000.
+            for ix = 1, max_pos do
+                machine_code[ix] = machine_code[ix] or 0x20000000
+            end
+        end
+    end
+
+    -- * Translate lines.
+    do
+        local ram_offset = 0
+        for ix_line, line in ipairs(lines) do
+            line_to_offset[ix_line] = ram_offset
+            if line.str:find("%S") then
+                local mnemonic, operands = line.str:match(
+                    "^%s*(%w+)%s*(.*)%s*$")
+                if mnemonic then
+                    -- * Needed due to the case-insensitive nature of assembly.
+                    mnemonic = mnemonic:lower()
+                    local op_code_class = mnemonic_to_class[mnemonic]
+                    if op_code_class then
+                        -- * This is a known mnemonic.
+                        local op_code = op_code_class.code
+                        local op_class = op_code_class.class
+                        local operand_modes = class_to_modes[op_class]
+                        local mode_code
+
+                        -- * Try to find an operand mode that matches the
+                        --   operand list, get mode data into `matching_mode`
+                        --   and matches to be substituted into
+                        --   `operand_matches` on success.
+                        local matching_mode, operand_matches
+                        for ix_mode, mode in ipairs(operand_modes) do
+                            mode_code = match_operand_mode(
+                                operands,
+                                ram_offset,
+                                ix_line,
+                                mode
+                            )
+                            if mode_code then
+                                break
+                            end
+                        end
+                        if mode_code then
+                            commit_value(ram_offset, mode_code + op_code)
+                            ram_offset = ram_offset + 1
+                        else
+                            print_el(
+                                ix_line,
+                                "invalid operand list (class %s)",
+                                op_class
+                            )
+                        end
+
+                    elseif mnemonic == "dw" then
+                        -- * Handle dw directive.
+                        while true do
+                            -- * Try to parse an immediate value or a string
+                            --   literal.
+                            local number, remainder = match_imm(operands, 16,
+                                ram_offset, ix_line, 0)
+                            if number then
+                                commit_value(ram_offset, 0x20000000 + number)
+                                ram_offset = ram_offset + 1
+                                operands = remainder
+                            else
+                                local literal_data, remainder = match_dw_string(
+                                    operands, ix_line)
+                                if literal_data then
+                                    for ix = 1, #literal_data do
+                                        commit_value(ram_offset, 0x20000000 +
+                                            literal_data:byte(ix))
+                                        ram_offset = ram_offset + 1
+                                    end
+                                    operands = remainder
+                                else
+                                    print_el(ix_line,
+                                        "expected immediate or string literal")
+                                    break
+                                end
+                            end
+
+                            -- * If that worked, try to parse a comma, or break
+                            --   the loop with a success status if there's
+                            --   nothing else.
+                            if operands:match("^%s*$") then
+                                break
+                            end
+                            operands = match_punctuator(operands, ",")
+                            if not operands then
+                                print_el(ix_line, "expected ','")
+                            end
+                        end
+
+                    elseif mnemonic == "org" then
+                        -- * Handle org directive. It takes any number it finds
+                        --   and then converts it to an integer. No further
+                        --   checks are done because I'm lazy.
+                        local new_origin = tonumber(operands)
+                        if new_origin then
+                            new_origin = math.floor(new_origin)
+                            if new_origin < 0 then
+                                print_el(ix_line, "origin below 0")
+                            else
+                                ram_offset = new_origin
+                            end
+                        else
+                            print_el(ix_line, "malformed number")
+                        end
+
+                    else
+                        -- * No clue what this might be.
+                        print_el(ix_line, "unknown mnemonic")
+                    end
+                else
+                    -- * What the hell is this?
+                    print_el(ix_line, "expected mnemonic, 'dw' or 'org'")
+                end
+            end
+        end
+    end
+
+    -- * Patch label addresses.
+    for offset, label_data in pairs(patch_label) do
+        -- * Technically we should get the shift amount in `label_data` too, but
+        --   that'd require passing another
+        local label_name = label_data.label
+        if label_name:find("^%.") then
+            local global_label = lines[label_data.invoker].global_label
+            if global_label then
+                label_name = global_label .. label_name
+            else
+                print_el(label_data.invoker, "local label without global label")
+                label_name = false
+            end
+        end
+        if label_name then
+            local label_line = labels[label_name]
+            if label_line then
+                local address = line_to_offset[label_line]
+                local shift = label_data.shift
+                if address >= 2 ^ label_data.width then
+                    truncated[label_data.invoker] = width
+                end
+                address = (address % 2 ^ label_data.width) * 2 ^ shift
+                machine_code[offset + 1] = machine_code[offset + 1] + address
+            else
+                print_el(label_data.invoker, "unknown label %s", label_name)
+            end
+        end
+    end
+
+    -- * Emit truncation warnings.
+    for line, width in pairs(truncated) do
+        print_wl(line, "immediate value truncated to %i bits", width)
+    end
+
+    -- * Bail out if anything nasty happened.
+    if errors_encountered then
+        return
+    end
+
+    pad_holes()
+    return machine_code
+end
+
+-- * The xpcall magic is here because someone might run this through a script
+--   runner tool, like I do (mine runs this when I press Ctrl+Return); which may
+--   or may not handle errors correctly. Mine sort of does, but it's better to
+--   catch them here.
 xpcall(function()
 
-	local headID
-	for partID in sim.parts() do
-		if  sim.partProperty(partID, "ctype") == 0x1864A205
-		and sim.partProperty(partID, "type") == elem.DEFAULT_PT_QRTZ then
-			headID = partID
-			-- * TODO: model selection; break won't do
-			break
-		end
-	end
-	if not headID then
-		print("no model found in simulation")
-		return
-	end
-	local head_x, head_y = sim.partPosition(headID)
+    -- * First we figure out where the CPU is.
+    -- * `qrtz_anchor_id` gets assigned the id of the QRTZ particle in the CPU
+    --   selected, if there's any.
+    local qrtz_anchor_id, target_model_number = get_cpu()
+    if not qrtz_anchor_id then
+        return
+    end
 
-	local tail_x, tail_y = head_x, head_y
-	local model = ""
-	while true do
-		tail_x = tail_x + 1
-		local tailID = sim.partID(tail_x, tail_y)
-		if not tailID then
-			break
-		end
-		local ctype = sim.partProperty(tailID, "ctype")
-		if ctype == 0 then
-			break
-		end
-		model = model .. string.char(ctype % 0x100)
-	end
+    -- * Then we assembler the source into an array of ctypes.
+    -- * `machine_code` only gets assigned if the translation was succeeds.
+    local machine_code = assemble_source()
+    if not machine_code then
+        return
+    end
 
-	local flash_func
-	if model == "R216K2A" then
-		local ram_x, ram_y, ram_w, ram_h = head_x + 70, head_y - 99, 128, 16
-		flash_func = function(assembler_output)
-			-- * TODO: add truncation warning
-			local ao_ix = 0
-			for py = ram_y, ram_y + ram_h - 1 do
-				local skip = 0
-				for px = ram_x, ram_x - ram_w + 1, -1 do
-					local cellID = sim.partID(px - skip, py)
-					if not cellID then
-						skip = 1
-						cellID = sim.partID(px - skip, py)
-					end
-					ao_ix = ao_ix + 1
-					sim.partProperty(cellID, "ctype", assembler_output[ao_ix] or 0x20000000)
-				end
-			end
-		end
-	else
-		print("model '" .. model .. "' is not supported")
-		return
-	end
+    -- * Finally we try to "flash" the machine code.
+    local flash_mode = supported_models[target_model_number].flash_mode
+    local flasher = supported_flash_modes[flash_mode]
+    if not flasher then
+        print_e("flash mode not supported")
+        print_i("this is a serious problem in the assembler")
+        return
+    end
+    if not flasher(qrtz_anchor_id, target_model_number, machine_code) then
+        return
+    end
 
-	if not args[1] then
-		print("no input file")
-		return
-	end
-
-	local PATTERNS = {
-		{"^%s*$",                                                           "em"},
-		{"^%s*%%(.+)%s*$",                                                  "sf"},
-		{"^%s*(%S+)%s*$",                                                   "mn"},
-		{"^%s*(%S+)%s*%[%s*(%S+)%s*([%+%-])%s*(%S+)%s*%]%s*$",              "mn", "pb", "ps", "pm"},
-		{"^%s*(%S+)%s*%[%s*(%S+)%s*%]%s*$",                                 "mn", "pm"},
-		{"^%s*(%S+)%s*(%S+)%s*,%s*%[%s*(%S+)%s*([%+%-])%s*(%S+)%s*%]%s*$",  "mn", "pv", "sb", "ss", "sm"},
-		{"^%s*(%S+)%s*(%S+)%s*,%s*%[%s*(%S+)%s*%]%s*$",                     "mn", "pv", "sm"},
-		{"^%s*(%S+)%s*%[%s*(%S+)%s*([%+%-])%s*(%S+)%s*%]%s*,%s*(%S+)%s*$",  "mn", "pb", "ps", "pm", "sv"},
-		{"^%s*(%S+)%s*%[%s*(%S+)%s*%]%s*,%s*(%S+)%s*$",                     "mn", "pm", "sv"},
-		{"^%s*(%S+)%s*(%S+)%s*$",                                           "mn", "pv"},
-		{"^%s*(%S+)%s*(%S+)%s*,%s*(%S+)%s*$",                               "mn", "pv", "sv"},
-	}
-
-	local REGISTERS = {
-		[ "r0"] = 0x0, [ "r1"] = 0x1, [ "r2"] = 0x2, [ "r3"] = 0x3,
-		[ "r4"] = 0x4, [ "r5"] = 0x5, [ "r6"] = 0x6, [ "r7"] = 0x7,
-		[ "r8"] = 0x8, [ "r9"] = 0x9, ["r10"] = 0xA, ["r11"] = 0xB,
-		["r12"] = 0xC, ["r13"] = 0xD, ["r14"] = 0xE, ["r15"] = 0xF,
-		--[ "ax"] = 0x0, [ "bx"] = 0x1, [ "cx"] = 0x2, [ "dx"] = 0x3,
-		--[ "ex"] = 0x4, [ "fx"] = 0x5, [ "gx"] = 0x6, [ "hx"] = 0x7,
-		--[ "ix"] = 0x8, [ "jx"] = 0x9, [ "kx"] = 0xA, [ "lx"] = 0xB,
-		--[ "mx"] = 0xC, [ "nx"] = 0xD, [ "ox"] = 0xE, [ "px"] = 0xF,
-		               [ "bp"] = 0xD, [ "sp"] = 0xE, [ "ip"] = 0xF
-	}
-
-	local MNEMONICS = {
-		["mov" ] = {0x20000000, "12"}, ["and" ] = {0x21000000, "12"}, ["test"] = {0x29000000, "12"}, ["or"  ] = {0x22000000, "12"},
-		["ors" ] = {0x2A000000, "12"}, ["xors"] = {0x2B000000, "12"}, ["adds"] = {0x2C000000, "12"}, ["adcs"] = {0x2D000000, "12"},
-		["xor" ] = {0x23000000, "12"}, ["add" ] = {0x24000000, "12"}, ["adc" ] = {0x25000000, "12"}, ["sub" ] = {0x26000000, "12"},
-		["cmp" ] = {0x2E000000, "12"}, ["sbb" ] = {0x27000000, "12"}, ["hlt" ] = {0x30000000, "  "}, ["jmp" ] = {0x31000000, " 2"},
-		["jb"  ] = {0x31000002, " 2"}, ["jnb" ] = {0x31000003, " 2"}, ["jo"  ] = {0x31000004, " 2"}, ["jno" ] = {0x31000005, " 2"},
-		["js"  ] = {0x31000006, " 2"}, ["jns" ] = {0x31000007, " 2"}, ["je"  ] = {0x31000008, " 2"}, ["jne" ] = {0x31000009, " 2"},
-		["jle" ] = {0x3100000A, " 2"}, ["jnle"] = {0x3100000B, " 2"}, ["jl"  ] = {0x3100000C, " 2"}, ["jnl" ] = {0x3100000D, " 2"},
-		["jbe" ] = {0x3100000E, " 2"}, ["jnbe"] = {0x3100000F, " 2"}, ["swm" ] = {0x28000000, " 2"}, ["rol" ] = {0x32000000, "12"},
-		["ror" ] = {0x33000000, "12"}, ["shl" ] = {0x34000000, "12"}, ["shr" ] = {0x35000000, "12"}, ["shld"] = {0x36000000, "12"},
-		["shrd"] = {0x37000000, "12"}, ["bump"] = {0x38000000, "1 "}, ["wait"] = {0x39000000, "1 "}, ["send"] = {0x3A000000, "12"},
-		["recv"] = {0x3B000000, "12"}, ["push"] = {0x3C000000, " 2"}, ["pop" ] = {0x3D000000, "1 "}, ["call"] = {0x3E000000, " 2"},
-		["ret" ] = {0x3F000000, "  "}, ["nop" ] = {0x20000000, "  "}, ["cmb" ] = {0x2F000000, "12"}
-	}
-	MNEMONICS["jnae"] = MNEMONICS["jb"  ]
-	MNEMONICS["jc"  ] = MNEMONICS["jb"  ]
-	MNEMONICS["jae" ] = MNEMONICS["jnb" ]
-	MNEMONICS["jnc" ] = MNEMONICS["jnb" ]
-	MNEMONICS["jz"  ] = MNEMONICS["je"  ]
-	MNEMONICS["jnz" ] = MNEMONICS["jne" ]
-	MNEMONICS["jng" ] = MNEMONICS["jle" ]
-	MNEMONICS["jg"  ] = MNEMONICS["jnle"]
-	MNEMONICS["jnge"] = MNEMONICS["jl"  ]
-	MNEMONICS["jge" ] = MNEMONICS["jnl" ]
-	MNEMONICS["jna" ] = MNEMONICS["jbe" ]
-	MNEMONICS["ja"  ] = MNEMONICS["jnbe"]
-
-	local BITMAPS = {
-				 --        mask,   soLS,   svLS,   poLS,   pvLS
-		["rv rv"] = {0x00000000,  0,  0,  4,  4,  0,  0,  4,  0},
-		["rv rm"] = {0x00100000,  0,  0,  4,  4,  0,  0,  4,  0},
-		["rv rn"] = {0x00900000,  4, 16,  4,  4,  0,  0,  4,  0},
-		["rv ro"] = {0x00908000,  4, 16,  4,  4,  0,  0,  4,  0},
-		["rv iv"] = {0x00200000,  0,  0, 16,  4,  0,  0,  4,  0},
-		["rv im"] = {0x00300000,  0,  0, 16,  4,  0,  0,  4,  0},
-		["rv in"] = {0x00B00000,  4, 16, 11,  4,  0,  0,  4,  0},
-		["rv io"] = {0x00B08000,  4, 16, 11,  4,  0,  0,  4,  0},
-		["rm rv"] = {0x00400000,  0,  0,  4,  4,  0,  0,  4,  0},
-		["rn rv"] = {0x00C00000,  0,  0,  4,  4,  4, 16,  4,  0},
-		["ro rv"] = {0x00C08000,  0,  0,  4,  4,  4, 16,  4,  0},
-		["im rv"] = {0x00500000,  0,  0,  4,  0,  0,  0, 16,  4},
-		["in rv"] = {0x00D00000,  0,  0,  4,  0,  4, 16, 11,  4},
-		["io rv"] = {0x00D08000,  0,  0,  4,  0,  4, 16, 11,  4},
-		["rm iv"] = {0x00600000,  0,  0, 16,  4,  0,  0,  4,  0},
-		["rn iv"] = {0x00E00000,  0,  0,  4,  4,  4, 16,  4,  0},
-		["ro iv"] = {0x00E08000,  0,  0,  4,  4,  4, 16,  4,  0},
-		["im iv"] = {0x00700000,  0,  0,  4,  0,  0,  0, 16,  4},
-		["in iv"] = {0x00F00000,  0,  0,  4,  0,  4, 16, 11,  4},
-		["io iv"] = {0x00F08000,  0,  0,  4,  0,  4, 16, 11,  4}
-	}
-
-	local failed = false
-
-	local referencable_output = {}
-	local labels = {}
-
-
-	local function emit_message(src, row, severity, message)
-		if     severity == "error" then
-			failed = true
-			print("\008l" .. src .. ": line " .. row .. ": error: \008w" .. message)
-		elseif severity == "warning" then
-			failed = true
-			print("\008o" .. src .. ": line " .. row .. ": warning: \008w" .. message)
-		elseif severity == "note" then
-			failed = true
-			print("\008t" .. src .. ": line " .. row .. ": note: \008w" .. message)
-		end
-	end
-
-	for arg_ix = 1, #args do
-		print("assembling: \008t\"" .. args[arg_ix] .. "\"")
-		local handle = io.open(args[arg_ix], "r")
-		if not handle then
-			print("failed to open file for reading")
-			return
-		end
-		local content = handle:read("*a"):gsub("[\1\2]", "%?")
-		handle:close()
-
-		local current_global_label
-		local function globalize_label(command, label_name)
-			if label_name:find("^%.") then
-				if current_global_label then
-					label_name = current_global_label .. label_name
-				else
-					emit_message(command.src, command.row, "note", "no current global label set, throwing error")
-					label_name = false
-				end
-			end
-			return label_name
-		end
-
-		local dw_spec_tbl_meta = {}
-		local dw_fenv = {
-			["false"] = true,
-			["true"] = true,
-			["nil"] = true
-		}
-		function dw_fenv._IS_SPEC(tbl)
-			return type(tbl) == "table" and getmetatable(tbl) == dw_spec_tbl_meta
-		end
-		function dw_fenv.proper_unpack(...)
-			local result = {}
-			local input = {...}
-			for ix = 1, #input do
-				if type(input[ix]) == "number" or dw_fenv._IS_SPEC(input[ix]) then
-					table.insert(result, input[ix])
-				elseif type(input[ix]) == "table" then
-					for nx = 1, #input[ix] do
-						table.insert(result, input[ix][nx])
-					end
-				elseif type(input[ix]) == "string" then
-					for letter in input[ix]:gmatch(".") do
-						table.insert(result, letter:byte())
-					end
-				else
-					error("cannot emit " .. tostring(input[ix]), 0)
-				end
-			end
-			return result
-		end
-		function dw_fenv._LABEL(str)
-			local label_name = globalize_label(dw_fenv._COMMAND, str)
-			if not label_name then
-				error("invalid label name '" .. str .. "'", 0)
-			end
-			return setmetatable({
-				label = label_name
-			}, dw_spec_tbl_meta)
-		end
-		function dw_fenv.duplicate(size, ...)
-			local stuff = dw_fenv.proper_unpack(...)
-			local result = {}
-			for ix = 1, size do
-				for sx = 1, #stuff do
-					table.insert(result, stuff[sx])
-				end
-			end
-			return result
-		end
-		function dw_fenv.pad(size, value, finish, ...)
-			local result = dw_fenv.proper_unpack(...)
-			if #result % size ~= 0 then
-				for ix = 1, size - #result % size do
-					table.insert(result, value)
-				end
-			end
-			if finish then
-				finish = dw_fenv.proper_unpack(finish)
-				for ix = 1, #finish do
-					table.insert(result, finish[ix])
-				end
-			end
-			return result
-		end
-
-		local function query_bitmap(command)
-			command.op1v, command.op1b, command.op1r = 0, 0, "rv"
-			command.op2v, command.op2b, command.op2r = 0, 0, "rv"
-			if     command.mnemonic_def[2]:find("12") then
-				command.op1v = command.pv or command.pm or 0
-				command.op1b = command.pb or               0
-				command.op1r = command.pr or "rv"
-				command.op2v = command.sv or command.sm or 0
-				command.op2b = command.sb or               0
-				command.op2r = command.sr or "rv"
-			elseif command.mnemonic_def[2]:find( "1") then
-				command.op1v = command.pv or command.pm or 0
-				command.op1b = command.pb or               0
-				command.op1r = command.pr or "rv"
-			elseif command.mnemonic_def[2]:find( "2") then
-				command.op2v = command.pv or command.pm or 0
-				command.op2b = command.pb or               0
-				command.op2r = command.pr or "rv"
-			end
-
-			command.bitmap = BITMAPS[command.op1r .. " " .. command.op2r]
-			return command.bitmap and true
-		end
-
-		local function is_label(name)
-			return name:sub(name:match("^[%a_][%w_]*%.()") or name:match("^%.()") or 1):find("^[%a_][%w_]*$") and true
-		end
-
-		local function parse_operand(command, key)
-			local op_name, op_role = key:match("(.)(.)")
-			if command[key] then
-				local value_found = false
-
-				if REGISTERS[command[key]] then
-					command[key] = REGISTERS[command[key]]
-					value_found = true
-					if op_role == "b" then
-						command[op_name .. "r"] = command[op_name .. "r"]:sub(1, 1) .. (command[op_name .. "s"] == "+" and "n" or "o")
-					else
-						command[op_name .. "r"] = "r" .. op_role
-					end
-
-				elseif op_role ~= "b" and tonumber(command[key]) then
-					command[key] = tonumber(command[key])
-					value_found = true
-					command[op_name .. "r"] = "i" .. op_role
-				elseif op_role ~= "b" and is_label(command[key]) then
-					local label_name = globalize_label(command, command[key])
-					if label_name then
-						command[key] = label_name
-						value_found = true
-						command[op_name .. "r"] = "i" .. op_role
-					end
-				end
-
-				if value_found then
-					return true
-				else
-					emit_message(command.src, command.row, "error", "invalid operand '" .. command[key] .. "' (" .. key .. ")")
-					return false
-				end
-			else
-				if op_role == "v" and not command[op_name .. "r"] then
-					command[op_name .. "r"] = "rv"
-				end
-				return true
-			end
-		end
-
-		local command_labels = {}
-		local lines = {""}
-		local literals = {}
-		local commands = {}
-		local function unescape_literals(str)
-			return str:gsub("\1%d+\2", function(cap)
-				return literals[cap]
-			end)
-		end
-		do
-			local line_cnt = 1
-			local literals_unique = 0
-			for nl_a, nl_b, line in content:gmatch("()\n*()([^\n]+)") do
-				for ix = 1, nl_b - nl_a do
-					line_cnt = line_cnt + 1
-					lines[line_cnt] = ""
-				end
-				lines[line_cnt] = (line .. ";'';\"\";"):gsub("('[^']*')", function(cap)
-					literals_unique = literals_unique + 1
-					local literal_index = "\1" .. literals_unique .. "\2"
-					literals[literal_index] = cap
-					return literal_index
-				end):gsub("(\"[^\"]*\")", function(cap)
-					literals_unique = literals_unique + 1
-					local literal_index = "\1" .. literals_unique .. "\2"
-					literals[literal_index] = cap
-					return literal_index
-				end):gsub(";.*$", "")
-
-				if lines[line_cnt]:find("['\"]") then
-					emit_message(args[arg_ix], line_cnt, "error", "quotation fail")
-				end
-				local line_clean = lines[line_cnt]
-
-				while true do
-					local label_name, rest = line_clean:match("^%s*(%S+)%s*:%s*(.*)$")
-					if label_name then
-						table.insert(command_labels, label_name)
-						line_clean = rest
-					else
-						break
-					end
-				end
-
-				local command_fields
-				for ix = 1, #PATTERNS do
-					local captures = {line_clean:match(PATTERNS[ix][1])}
-					if captures[1] then
-						command_fields = {
-							row = line_cnt,
-							src = args[arg_ix],
-							labels = command_labels
-						}
-						for key, value in next, captures do
-							command_fields[PATTERNS[ix][key + 1]] = value
-						end
-						break
-					end
-				end
-				if command_fields then
-					if not command_fields.em then
-						table.insert(commands, command_fields)
-						command_labels = {} -- * flush label store
-					end
-				else
-					emit_message(args[arg_ix], line_cnt, "error", "pattern fail")
-				end
-			end
-		end
-
-		for ix = 1, #commands do
-			local command = commands[ix]
-
-			for lx = 1, #command.labels do
-				local label_cm_name = command.labels[lx]
-				if not is_label(label_cm_name) then
-					emit_message(command.src, command.row, "error", "invalid label name '" .. label_cm_name .. "'")
-				else
-					local old_label_name = label_cm_name
-					label_cm_name = globalize_label(command, old_label_name)
-					if label_cm_name == old_label_name then
-						current_global_label = label_cm_name
-					end
-					if label_cm_name then
-						labels[label_cm_name] = #referencable_output
-					else
-						emit_message(command.src, command.row, "error", "invalid label name '" .. old_label_name .. "'")
-					end
-				end
-			end
-
-			if command.mn then
-				local mnemonic_def = MNEMONICS[command.mn]
-				command.mnemonic_def = mnemonic_def
-
-				if not mnemonic_def then
-					emit_message(command.src, command.row, "error", "unknown mnemonic")
-
-				elseif (mnemonic_def[2]:find("%d"  ) and true) ~= ((command.pv or command.pm) and true) then
-					emit_message(command.src, command.row, "error", "invalid operand list (primary)")
-				elseif (mnemonic_def[2]:find("%d%d") and true) ~= ((command.sv or command.sm) and true) then
-					emit_message(command.src, command.row, "error", "invalid operand list (secondary)")
-
-				elseif not parse_operand(command, "pm") then
-				elseif not parse_operand(command, "pb") then
-				elseif not parse_operand(command, "pv") then
-				elseif not parse_operand(command, "sm") then
-				elseif not parse_operand(command, "sb") then
-				elseif not parse_operand(command, "sv") then
-				elseif not query_bitmap(command) then
-					emit_message(command.src, command.row, "error", "invalid operand list (type)")
-
-				else
-					table.insert(referencable_output, command)
-				end
-
-			elseif command.sf then
-				local command_str, rest = command.sf:match("^(%S*)%s*(.*)$")
-				if command_str == "dw" then
-					local rest_func, err = loadstring("return proper_unpack(" .. unescape_literals(rest:gsub("[%.A-Za-z_0-9\128-\255]+", function(cap)
-						if cap:find("^[0-9]") then
-							return cap
-						elseif dw_fenv[cap] then
-							return cap
-						else
-							return "_LABEL(\"" .. cap .. "\")"
-						end
-					end)) .. ")", "%dw")
-					if rest_func then
-						dw_fenv._COMMAND = command
-						local results = {pcall(setfenv(rest_func, dw_fenv))}
-						if results[1] then
-							local emit_tbl = results[2]
-							for ix = 1, #emit_tbl do
-								if dw_fenv._IS_SPEC(emit_tbl[ix]) then
-									if emit_tbl[ix].label then
-										table.insert(referencable_output, {
-											absolute = 0x20000000,
-											op2v = emit_tbl[ix].label,
-											row = command.row,
-											src = command.src
-										})
-									end
-								else
-									table.insert(referencable_output, {
-										absolute = 0x20000000 + math.floor(emit_tbl[ix]) % 0x10000
-									})
-								end
-							end
-						else
-							emit_message(command.src, command.row, "error", "dw directive failed: " .. results[2])
-						end
-					else
-						emit_message(command.src, command.row, "error", "invalid dw directive: " .. err)
-					end
-
-				else
-					emit_message(command.src, command.row, "error", "invalid directive: " .. command_str)
-
-				end
-
-			else
-				error("sanity check failure: no valid field in command")
-			end
-		end
-	end
-
-	if not failed then
-		for ix = 1, #referencable_output do
-			local command = referencable_output[ix]
-
-			if type(command.op1v) == "string" then
-				local label_name = command.op1v
-				command.op1v = labels[label_name]
-				if not command.op1v then
-					emit_message(command.src, command.row, "error", "unknown label name '" .. label_name .. "'")
-				end
-			end
-
-			if type(command.op2v) == "string" then
-				local label_name = command.op2v
-				command.op2v = labels[label_name]
-				if not command.op2v then
-					emit_message(command.src, command.row, "error", "unknown label name '" .. label_name .. "'")
-				end
-			end
-		end
-	end
-
-	if not failed then
-		local assembler_output = {}
-		--flash_func(assembler_output)
-
-		--local handle = io.open("log.log", "w")
-		for ix = 1, #referencable_output do
-			local command = referencable_output[ix]
-
-			if command.absolute then
-				if command.op2v then
-					command.absolute = command.absolute + command.op2v
-				end
-				table.insert(assembler_output, command.absolute)
-			else
-				table.insert(assembler_output,
-					command.mnemonic_def[1] + command.bitmap[1] +
-					command.op1v % 2 ^ command.bitmap[8] * 2 ^ command.bitmap[9] +
-					command.op1b % 2 ^ command.bitmap[6] * 2 ^ command.bitmap[7] +
-					command.op2v % 2 ^ command.bitmap[4] * 2 ^ command.bitmap[5] +
-					command.op2b % 2 ^ command.bitmap[2] * 2 ^ command.bitmap[3]
-				)
-			end
-
-			--handle:write(("%08X\n"):format(assembler_output[ix]))
-		end
-		--handle:close()
-
-		flash_func(assembler_output)
-	end
+    -- * We're allowed to feel good now.
+    print_i("source assembled and flashed without errors")
 
 end, function(err)
-	print(err)
-	print(debug.traceback())
+    print_e(err)
+    print_e(debug.traceback())
+    print_i("this is a serious problem in the assembler")
 end)
 
-print("r2asm.lua has finished")
+-- * Yay, we're done.
+if redirect_log then
+    print_("\008t[r2asm] \008wlog written to " .. log_path)
+    redirect_log:close()
+end
+print_("\008t[r2asm] \008wfinished assembling")
