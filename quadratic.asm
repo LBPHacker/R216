@@ -503,9 +503,9 @@ float_from_string:
                               ;   * bit 1: sign of explicit base-10 exponent,
                               ;   * bit 2: leading zeroes have been ignored,
                               ;   * bit 15: sign of the number.
-    mov r9, 0                 ; * r9 is 0 until the decimal dot is read and
-                              ;   becomes 1 afterwards. It's used to increment
-                              ;   r5 for every digit read,
+    mov r9, 1                 ; * r9 is 1 until the decimal dot is read and
+                              ;   becomes 0 afterwards. It's used to increment
+                              ;   r5 for every digit read.
 .ignore_spaces:
     cmp [r0], ' '
     jne .parse_sign
@@ -528,6 +528,19 @@ float_from_string:
 .parse_digits:
     mov r1, [r0]
     sub r1, '0'
+    jnz .no_2nd_ignore_zeroes ; * It's possible that we get this far even though
+    ors r9, r4                ;   there are still leading zeroes to be ignored.
+    jnz .no_2nd_ignore_zeroes ; * The reason might be a dot that breaks the
+                              ;   first streak of zeroes. If it is the case,
+                              ;   continue skipping zeroes here.
+                              ; * The ors here clears the zero flag if either
+                              ;   the dot hasn't been read yet or if all the
+                              ;   leading zeroes have been skipped, derived from
+                              ;   the fact that r4 is more than 0.
+    sub r5, 1                 ; * Decrement r5 if the dot has already been read.
+    add r0, 1                 ; * The trick is that we don't increase r4, the
+    jmp .parse_digits         ;   significant digit counter.
+.no_2nd_ignore_zeroes:
     jb .parse_dot             ; * It's not a digit but it may still be a dot.
     cmp r1, 9                 ; * That's a '9' (we subtracted 0x30 earlier).
     ja .parse_dot             ; * It's not a digit but it may still be a dot.
@@ -544,7 +557,8 @@ float_from_string:
     scl r3, 1                 ;   r2_32 * 10 is assigned to r2_32.
     add r2, r1                ; * Add r1 to r2_32, merging in the last digit.
     adc r3, 0
-    sub r5, r9                ; * Decrement r5 if the dot has already been read.
+    sub r5, 1                 ; * Decrement r5 if the dot has already been read.
+    add r5, r9
     jmp .back_to_digit_loop
 .truncate_last_digit:
     cmp r1, 5                 ; * At this point the digit cannot be merged
@@ -552,8 +566,8 @@ float_from_string:
     add r2, 1                 ;   is in the buffer a closer approximation of
     adc r3, 0                 ;   the number entered.
 .ignore_last_digit:
-    add r5, 1                 ; * This is a bit tricky. Increment r5 if the
-    sub r5, r9                ;   dot hasn't been read yet. This is needed
+    add r5, r9                ; * This is a bit tricky. Increment r5 if the
+                              ;   dot hasn't been read yet. This is needed
                               ;   because even though the digit read is ignored,
                               ;   it still does influence the base-10 exponent
                               ;   of the number if it's not after the decimal
@@ -565,9 +579,9 @@ float_from_string:
 .parse_dot:
     cmp r1, -2                ; * That's a '.' (we subtracted 0x30 earlier).
     jne .parse_exponent       ; * If it's not a even dot, move on.
-    test r9, 1                ; * Check if the dot has already been read.
-    jnz .parse_exponent       ;   Move on if it has.
-    mov r9, 1                 ; * Well, it certainly has now.
+    test r9, r9               ; * Check if the dot has already been read.
+    jz .parse_exponent        ;   Move on if it has.
+    mov r9, 0                 ; * Well, it certainly has now.
     add r0, 1
     jmp .parse_digits
 .parse_exponent:
