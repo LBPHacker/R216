@@ -574,7 +574,7 @@ reflects the number of operands the operations in that class take.
 | [`js`][530]   | 1* | jump if sign set             |  no | 1 |   `0x31000006` |
 | [`jz`][530]   | 1* | jump if zero                 |  no | 1 |   `0x31000008` |
 | [`mov`][557]  | 2  | copy value                   | yes | 1 |   `0x20000000` |
-| [`nop`][559]  | 0  | do nothing                   | yes | 1 |   `0x31000001` |
+| [`nop`][559]  | 0  | do nothing                   |  no | 1 |   `0x31000001` |
 | [`or`][558]   | 2  | bitwise OR                   | yes | 1 |   `0x22000000` |
 | [`ors`][558]  | 2  | non-storing bitwise OR       | yes | 1 |   `0x2A000000` |
 | [`pop`][560]  | 1  | pop from stack               | yes | 2 |   `0x3D000000` |

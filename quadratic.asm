@@ -205,7 +205,7 @@ start:
     send r10, 0x10A2
     mov r0, global_str_buf
     call write_string         ;   ... and print both current solutions
-    send r10, 105             ;   with an i for the imaginary parts.
+    send r10, 'i'             ;   with an i for the imaginary parts.
     call .bump_progress_bar
     add sp, 4                 ; * Pop everything, stack is ($).
     jmp .demo_wrapup          ; * Then branch off.
@@ -507,27 +507,27 @@ float_from_string:
                               ;   becomes 1 afterwards. It's used to increment
                               ;   r5 for every digit read,
 .ignore_spaces:
-    cmp [r0], 0x20            ; * That's a ' '.
+    cmp [r0], ' '
     jne .parse_sign
     add r0, 1                 ; * Ignore leading spaces.
     jmp .ignore_spaces
 .parse_sign:
-    cmp [r0], 0x2B            ; * That's a '+'.
+    cmp [r0], '+'
     je .sign_positive
-    cmp [r0], 0x2D            ; * That's a '-'.
+    cmp [r0], '-'
     jne .ignore_zeroes
     xor r8, 0x8000            ; * Flip the sign of the number.
 .sign_positive:
     add r0, 1
 .ignore_zeroes:
-    cmp [r0], 0x30            ; * That's a '0'.
+    cmp [r0], '0'
     jne .parse_digits
     or r8, 0x0004
     add r0, 1                 ; * Ignore leading zeroes.
     jmp .ignore_zeroes
 .parse_digits:
     mov r1, [r0]
-    sub r1, 0x30              ; * That's a '0'.
+    sub r1, '0'
     jb .parse_dot             ; * It's not a digit but it may still be a dot.
     cmp r1, 9                 ; * That's a '9' (we subtracted 0x30 earlier).
     ja .parse_dot             ; * It's not a digit but it may still be a dot.
@@ -579,16 +579,16 @@ float_from_string:
 .seen_exponent_e:
     xor r8, 0x0001            ; * Flip explicit exponent bit in parser state.
     add r0, 1
-    cmp [r0], 0x2B            ; * That's a '+'.
+    cmp [r0], '+'
     je .sign_exponent_positive
-    cmp [r0], 0x2D            ; * That's a '-'.
+    cmp [r0], '-'
     jne .read_exp_digits
     xor r8, 0x0002            ; * Flip exponent sign bit in parser state.
 .sign_exponent_positive:
     add r0, 1
 .read_exp_digits:
     mov r1, [r0]
-    sub r1, 0x30              ; * That's a '0'.
+    sub r1, '0'
     jb .read_exp_done         ; * It's not a digit, move one.
     cmp r1, 9                 ; * That's a '9' (we subtracted 0x30 earlier).
     ja .read_exp_done         ; * It's not a digit, move one.
@@ -793,7 +793,7 @@ float_to_string:
     push r0                   ; * Save string buffer pointer.
     test r3, r3               ; * Check sign bit.
     jns .sign_positive
-    mov [r0], 0x2D            ; * That's a '-'.
+    mov [r0], '-'
     add r0, 1
 .sign_positive:
     mov r1, r3                ; * Extract base-2 exponent into r1.
@@ -992,7 +992,7 @@ float_to_string:
     shl r8, 4
     scl r9, 4
     shr r3, 12
-    add r3, 0x30              ; * That's a '0'.
+    add r3, '0'
     mov [r0], r3              ; * Store ASCII-coded digit, bump output pointer.
     add r0, 1
     cmp r2, r4                ; * Check if we've reached the point where we
@@ -1005,7 +1005,7 @@ float_to_string:
     jz .emit_bcd_done
     cmp r2, r4                ; * Print the decimal dot for real this time if
     jne .emit_bcd_no_dot      ;   this is where we should print it.
-    mov [r0], 0x2E            ; * That's a '.'.
+    mov [r0], '.'
     add r0, 1                 ; * Bump output pointer.
 .emit_bcd_no_dot:
     sub r2, 1
@@ -1017,12 +1017,12 @@ float_to_string:
     add r0, 1                 ; * Bump output pointer.
     test r5, r5
     jns .base10_exp_no_sign
-    mov [r0], 0x2D            ; * That's a '-'.
+    mov [r0], '-'
     add r0, 1                 ; * Print a negative sign if the base-10 logarithm
     xor r5, 0xFFFF            ;   is negative. Also negate it so it's easier to
     add r5, 1                 ;   print.
 .base10_exp_no_sign:
-    mov r4, 0x30              ; * That's a '0'.
+    mov r4, '0'
     cmp r5, 20                ; * Ugly way to print an unsigned integer between
     jnae .base10_exp_b_20     ;   0 and 39. I'm sure it's obvious what happens
     add r4, 2                 ;   here.
@@ -1033,8 +1033,8 @@ float_to_string:
     add r4, 1
     sub r5, 10
 .base10_exp_b_10:
-    add r5, 0x30              ; * That's a '0'.
-    cmp r4, 0x30              ; * Don't emit tens if there's nothing to emit.
+    add r5, '0'
+    cmp r4, '0'               ; * Don't emit tens if there's nothing to emit.
     je .no_emit_exp_tens
     mov [r0], r4
     add r0, 1
@@ -1049,26 +1049,26 @@ float_to_string:
     sub r1, r0                ; * Calculate number of characters written.
     ret
 .result_is_zero:
-    mov [r0], 0x30            ; * That's a '0'.
+    mov [r0], '0'
     add r0, 1
     jmp .exit
 .result_is_inf:
     and r3, 0x007F            ; * Number is nan if any of the bits in the
     or r3, r2                 ;   mantissa are set.
     jnz .result_is_nan
-    mov [r0], 105             ; * That's an 'i'.
+    mov [r0], 'i'
     add r0, 1
-    mov [r0], 110             ; * That's an 'n'.
+    mov [r0], 'n'
     add r0, 1
-    mov [r0], 102             ; * That's an 'f'.
+    mov [r0], 'f'
     add r0, 1
     jmp .exit
 .result_is_nan:
-    mov [r0], 110             ; * That's an 'n'.
+    mov [r0], 'n'
     add r0, 1
-    mov [r0], 97              ; * That's an 'a'.
+    mov [r0], 'a'
     add r0, 1
-    mov [r0], 110             ; * That's an 'n'.
+    mov [r0], 'n'
     add r0, 1
     jmp .exit
 
