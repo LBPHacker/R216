@@ -293,6 +293,7 @@ start:
     send r10, 0x1071
     mov r0, .press_any_key_string
     call write_string         ; * Display nice Press any key message.
+    bump r10                  ; * Drop whatever is in the input buffer.
     mov r6, 0x2003
     mov r11, 0x107E
     call read_character_blink ; * Wait for a key press while blinking.
@@ -419,6 +420,7 @@ read_character_blink:
 ; * r10 is terminal port address.
 ; * r11 is cursor position.
 read_string:
+    bump r10                  ; * Drop whatever is in the input buffer.
     mov r5, r1
     sub r5, 1                 ; * The size of the buffer includes the
                               ;   terminating zero, so the character limit
@@ -529,12 +531,12 @@ float_from_string:
     mov r1, [r0]
     sub r1, '0'
     jnz .no_2nd_ignore_zeroes ; * It's possible that we get this far even though
-    ors r9, r4                ;   there are still leading zeroes to be ignored.
-    jnz .no_2nd_ignore_zeroes ; * The reason might be a dot that breaks the
-                              ;   first streak of zeroes. If it is the case,
+                              ;   there are still leading zeroes to be ignored.
+                              ; * The reason might be a dot that breaks the
+                              ;   first streak of zeroes. If this is the case,
                               ;   continue skipping zeroes here.
-                              ; * The ors here clears the zero flag if either
-                              ;   the dot hasn't been read yet or if all the
+    ors r9, r4                ; * The ors here clears the zero flag if either
+    jnz .no_2nd_ignore_zeroes ;   the dot hasn't been read yet or if all the
                               ;   leading zeroes have been skipped, derived from
                               ;   the fact that r4 is more than 0.
     sub r5, 1                 ; * Decrement r5 if the dot has already been read.
@@ -562,7 +564,7 @@ float_from_string:
     jmp .back_to_digit_loop
 .truncate_last_digit:
     cmp r1, 5                 ; * At this point the digit cannot be merged
-    jb .back_to_digit_loop    ;   into the buffer but it can help make whatever
+    jb .ignore_last_digit     ;   into the buffer but it can help make whatever
     add r2, 1                 ;   is in the buffer a closer approximation of
     adc r3, 0                 ;   the number entered.
 .ignore_last_digit:
