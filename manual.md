@@ -56,11 +56,11 @@ few of those limitations.
 [800]: /powdertoy/R16K1S60/manual.md
     "Manual and Instruction Reference for R16K1S60"
 
-This computer is none other than the **R2**. At the time of publishing, the only
-existing model is the **R216K2A**, which features:
+This computer is none other than the **R2**. The two models that exist right now
+are the **R216K2A** and the **R216K4A**, which feature:
 
 * **subframe 16-bit architecture**, but of course;
-* **a RAM with 2048 16-bit cells**, which also handles instructions;
+* **a RAM with 2048 or 4096 16-bit cells**, which also handles instructions;
 * **29-bit instruction set**, meaning instructions fit a single code word;
 * **16 16-bit registers**, 14 of which are general purpose ones;
 * **shift, add and bitwise operations**, the usual ALU goodness;
@@ -78,15 +78,20 @@ not read through all of it.
 For the sake of completeness, here's the
 [R216K2A save page][897], the [relevant forum thread][898] and a
 [thing that opens the R216K2A save][896] directly in TPT if your TPT is
-configured properly. Additionally, all headers are both anchors and links
-pointing to themselves, so feel free to copy them around and reference them
-anywhere.
+configured properly. There's of course a [save page link][894] and a
+[TPT hotlink][893] for the R216K4A as well. Additionally, all headers are both
+anchors and links pointing to themselves, so feel free to copy them around and
+reference them anywhere.
 
 While I like to think that my composing skills have improved a lot in the past
 few years, mistakes are inevitably made. As always, if you have anything
 in mind for this manual, be it a fix or an enhancement or whatever, feel free to
 bump me. This manual, among other things, [is on GitHub][899].
 
+[893]: ptsave:2305835#R216K4A
+    "Open R216K2A save"
+[894]: https://powdertoy.co.uk/Browse/View.html?ID=2305835
+    "The R216K4A save page"
 [895]: #RAM
     "Features in detail – RAM"
 [896]: ptsave:2303519#R216K2A
@@ -148,11 +153,11 @@ numbers.
 
 ### RAM
 
-The R216K2A model features a magical PSTN-driven 2048-cell FILT RAM with
-constant space horizontal and vertical demultiplexers (i.e. it's really space
-efficient). Each FILT stores 16 bits of data, except when it stores the 29 bits
-of an instruction, but as the data path is 16-bit, most of the components can't
-access the most significant 13 bits directly. Those are dedicated to the
+The R216K2A model features a magical PSTN-driven 2048-cell FILT RAM
+with constant space horizontal and vertical demultiplexers (i.e. it's really
+space efficient). Each FILT stores 16 bits of data, except when it stores the 29
+bits of an instruction, but as the data path is 16-bit, most of the components
+can't access the most significant 13 bits directly. Those are dedicated to the
 instruction set and nothing else.
 
 This, weirdly enough, doesn't mean that those bits can't be accessed at all.
@@ -160,11 +165,7 @@ They in fact [can be written][573] (but not read), thus allowing for code that
 writes code. The R2 has a write-only 13-bit register, the contents of which are
 merged with whatever 16-bit value is written to RAM on a direct write.
 
-By the way, I built the R216K2A with a possible RAM upgrade in mind, and so it's
-really easy to upgrade the RAM to a 4096-cell one, possibly yielding a
-**R216K4A** model. The only reason I haven't built it yet is because I wanted to
-be done with the R216K2A first. If anyone is interested in seeing that model
-though, you know where to knock.
+The R216K4A is very similar to the R216K2A model, except its RAM has 4096 cells.
 
 ### Instruction set
 
