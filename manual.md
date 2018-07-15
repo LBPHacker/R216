@@ -541,6 +541,7 @@ reflects the number of operands the operations in that class take.
 | [`add`][520]  | 2  | add                          | yes | 1 |   `0x24000000` |
 | [`adds`][520] | 2  | non-storing add              | yes | 1 |   `0x2C000000` |
 | [`and`][524]  | 2  | bitwise AND                  | yes | 1 |   `0x21000000` |
+| [`ands`][524] | 2  | non-storing bitwise AND      | yes | 1 |   `0x29000000` |
 | [`bump`][525] | 1  | send attention request       |  no | 1 |   `0x38000000` |
 | [`call`][526] | 1* | call subroutine              |  no | 2 |   `0x3E000000` |
 | [`cmb`][527]  | 2  | compare with borrow          | yes | 1 |   `0x2F000000` |
@@ -585,12 +586,14 @@ reflects the number of operands the operations in that class take.
 | [`rol`][564]  | 2  | rotate left                  | yes | 1 |   `0x32000000` |
 | [`ror`][564]  | 2  | rotate right                 | yes | 1 |   `0x33000000` |
 | [`sbb`][527]  | 2  | subtract with borrow         | yes | 1 |   `0x27000000` |
+| [`sbbs`][527] | 2  | compare with borrow          | yes | 1 |   `0x2F000000` |
 | [`send`][567] | 2  | send raw data                |  no | 1 |   `0x3A000000` |
 | [`shl`][568]  | 2  | shift left                   | yes | 1 |   `0x34000000` |
 | [`scl`][568]  | 2  | chained shift left           | yes | 1 |   `0x36000000` |
 | [`shr`][568]  | 2  | shift right                  | yes | 1 |   `0x35000000` |
 | [`scr`][568]  | 2  | chained shift right          | yes | 1 |   `0x37000000` |
 | [`sub`][527]  | 2  | subtract                     | yes | 1 |   `0x26000000` |
+| [`subs`][527] | 2  | compare                      | yes | 1 |   `0x2E000000` |
 | [`swm`][573]  | 1* | set write mask               | yes | 1 |   `0x28000000` |
 | [`test`][524] | 2  | non-storing bitwise AND      | yes | 1 |   `0x29000000` |
 | [`wait`][575] | 1  | check for attention request  | yes | 1 |   `0x39000000` |
@@ -735,6 +738,8 @@ test primary, secondary ; * Non-storing bitwise AND, also called bit test.
 its primary operand. Flags are updated according to this result. `test` is the
 non-storing version of `and`.
 
+`ands` is an alias for `test`.
+
 ### OR, ORS -- bitwise OR
 
 ```r2asm
@@ -794,6 +799,8 @@ or a 0 if unset. `cmp` and `cmb` are the non-storing versions of `sub` and
 
 These instruction report an unsigned overflow by setting the carry flag and a
 signed overflow by setting the overflow flag. These flags are reset otherwise.
+
+`subs` and `sbbs` are aliases for `cmp` and `cmb`, respectively.
 
 ### SWM -- set write mask
 
