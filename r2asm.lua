@@ -69,7 +69,14 @@ local supported_models = {
         ram_y = -99,
         ram_width = 128,
         ram_height = 16
-    }
+    },
+    ["R216K4A"] = {
+        flash_mode = "skip_one_rtl",
+        ram_x = 70,
+        ram_y = -115,
+        ram_width = 128,
+        ram_height = 32
+    },
 }
 local supported_flash_modes = {
     ["skip_one_rtl"] = function(anchor, model, code)
@@ -276,9 +283,10 @@ local function get_cpu()
             --   extraction succeeds, i.e. the string in the row of particles is
             --   zero-terminated. Extraction also fails if particles are
             --   missing. I don't care if the row is not made from FILT though.
-            local model_number
+            local model_number, model_checksum
             do
                 local mn_probably = ""
+                local read_checksum = false
                 local mn_x, mn_y = x, y
                 while true do
                     -- * Check the next particle in the row.
@@ -292,34 +300,55 @@ local function get_cpu()
                         break
                     end
                     local mn_ct = sim.partProperty(mn_id, "ctype") % 0x100
-                    if mn_ct == 0 then
+                    if read_checksum then
 
                         -- * Assign buffer to `model_number` if the row ends
                         --   properly, in a null-terminator.
                         model_number = mn_probably
+                        model_checksum = mn_ct
                         break
                     end
 
-                    -- * Append byte to buffer.
-                    mn_probably = mn_probably .. string.char(mn_ct)
+                    if mn_ct == 0 then
+                        -- * We reached the end of the model name, read the
+                        --   checksum in the next iteration and then exit.
+                        read_checksum = true
+                    else
+                        -- * Append byte to buffer.
+                        mn_probably = mn_probably .. string.char(mn_ct)
+                    end
                 end
             end
 
-            -- * Look for the particle on the left with the CPU's id. I don't
-            --   really care if it's not a FILT. There must be a particle
-            --   though.
-            local cpu_id
-            do
-                local cid_id = sim.partID(x - 1, y)
-                if cid_id then
-                    cpu_id = sim.partProperty(cid_id, "ctype")
+            -- * Calculate checksum, ignore the model if it's invalid.
+            if model_number then
+                local local_checksum = 0
+                for ix = 1, #model_number do
+                    local_checksum = local_checksum + model_number:byte(ix)
+                end
+                if local_checksum % 0x100 ~= model_checksum then
+                    model_number = nil
                 end
             end
 
-            -- * Save anchor id if both the model number and the CPU id match.
-            if  supported_models[model_number]
-            and (not target_cpu_id or cpu_id == target_cpu_id) then
-                anchors_found[partID] = model_number
+            if model_number then
+                -- * Look for the particle on the left with the CPU's id. I
+                --   don't really care if it's not a FILT. There must be a
+                --   particle though.
+                local cpu_id
+                do
+                    local cid_id = sim.partID(x - 1, y)
+                    if cid_id then
+                        cpu_id = sim.partProperty(cid_id, "ctype")
+                    end
+                end
+
+                -- * Save anchor id if both the model number and the CPU id
+                --   match.
+                if  supported_models[model_number]
+                and (not target_cpu_id or cpu_id == target_cpu_id) then
+                    anchors_found[partID] = model_number
+                end
             end
         end
     end
