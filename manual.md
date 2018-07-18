@@ -1,6 +1,6 @@
 % R216 Manual and Instruction Reference
 % LBPHacker
-% 07-07-2018
+% 18-07-2018
 
 # R216 Manual and Instruction Reference
 
@@ -173,7 +173,7 @@ The R2 instruction set is in an almost perfect balance between width, complexity
 and versatility. Using the full 29 bits of the FILT spectrum, it manages to
 encode even 16-bit immediate operands in a single cell of RAM if the destination
 operand is simple enough. This greatly simplifies the instruction decoder and
-saves valuable instruction space and clock cycles.
+saves valuable code space and clock cycles.
 
 Decoder complexity is further reduced by the layout of fields inside the
 instructions. 5 bits are dedicated to the operation to be executed on the
@@ -210,14 +210,13 @@ outcome of the last addition in the chain.
 
 The shifter handles left and right shifts and rotation, once again both the
 standalone and the chained variants. Much like with addition, shifts can be
-chained together to shift big numbers. With a bit of hacking, rotation of big
-numbers can be achieved as well. It's important to note that flags do not work
-the same way with chained shifts as with standalone ones as the zero flag
-reflects the result of only the last shift in the chain.
-
-Also note that shifts _by_ an amount equal to or greater than 16 bits are not
-supported; chained shifts in this case act like degenerate cases of `memmove`,
-which is up to the user to implement.
+chained together to shift big numbers. [With a bit of hacking][580], rotation of
+big numbers can be achieved as well. It's important to note that flags do not
+work the same way with chained shifts as with standalone ones as the zero flag
+reflects the result of only the last shift in the chain. Also note that shifts
+_by_ an amount equal to or greater than 16 bits are not supported; chained
+shifts by such amounts would act like degenerate cases of `memmove`, which is up
+to the user to implement.
 
 The bitwise unit handles basic bitwise operations and copying. Although, once
 again, instructions can be chained for big numbers, there's no practical
@@ -230,7 +229,7 @@ zero or not. This seldom poses a problem though.
 
 The R2 has dedicated stack operations that allow pushing to and popping from the
 stack, and special variants of these that push the instruction pointer and then
-do an unconditional jump (a subroutine call) and pop a value into the
+do an unconditional jump (a subroutine call), and that pop a value into the
 instruction pointer (a subroutine return). These are hardcoded to use `r14` as
 the stack pointer; a push decrements `r14` before writing to the cell
 referenced by it and a pop increments `r14` after reading from the cell it
@@ -259,7 +258,7 @@ doing one of these every other frame.
 An operand mode is a certain combination of all kinds of operands for an
 instruction to work with. Operands can be registers or cells in the RAM.
 Registers are always referred to by their _names_ (an integer between 0 and 15,
-inclusive) while RAM cells may be referred to by their address. Register names
+inclusive) while RAM cells may be referred to by their addresses. Register names
 and addresses can be encoded directly in the instruction. Addresses can also be
 calculated on the fly from the contents of registers, in which case the names of
 the registers being used are encoded in the instruction instead.
@@ -275,19 +274,22 @@ The same way the R1 has 4 peripheral ports, the R2 has 256, numbered
 from 0 to 255, 0 being the built-in one, all others being virtual in the sense
 that while they exist, they cannot be accessed by peripherals without the help
 of an _I/O breakout box_. The R2 peripheral interface is hardware-compatible
-with the R1 and the few peripherals that exist for the R1.
+with the R1 and the few peripherals that exist for the R1 (this does not imply
+software-compatibility though, and indeed, most R1-compatible devices that send
+data to the computer are impossible to work with, due to reading instructions
+being non-blocking).
 
 There are three bundles of FILT exiting the case on the right; one with three
 wires, one with one, and one with two. The first two of these constitute the
-expansion interface specific to the R2, to which any number of breakout
-boxes may be connected to expose more virtual ports. The third is the
-traditional 2-wire peripheral interface, which exposes the built-in port 0 with
-the help of a stripped-down version of the breakout box built into the R2.
+I/O expansion interface of the R2, to which any number of breakout boxes may be
+connected to expose more virtual ports. The third is the traditional 2-wire
+peripheral interface, which exposes the built-in port 0 with the help of a
+stripped-down version of the breakout box built into the R2.
 
 The breakout boxes provide two 2-wire peripheral interfaces; one on top and
 one at the bottom. Note that there are two interfaces for convenience only;
-these are not in fact different interfaces and only one peripheral must be
-connected to either one of these at a time.
+these are not in fact different interfaces and only one of these may be used
+with a peripheral at a time.
 
 See also [More on I/O ports][330].
 
@@ -300,7 +302,7 @@ With an area of 168×112 particles, the R2 is really quite small. Certainly the
 smallest computer _I've ever built_ to date. It could definitely be smaller, as
 is apparent by the copious amounts of unused space inside the case. Its width is
 dictated by the 128×16 particle RAM, and to some extent its height is too.
-I couldn't have it looking weird, so I chose a height so that it looked good
+I couldn't have it looking weird, so I chose its height so that it looked good
 enough with the width I managed to shrink the RAM to, and thus it ended up being
 168×112.
 
@@ -358,23 +360,24 @@ standalone read or a standalone write.
 ### 29-bit instruction set
 
 The R1 had this problem that its instruction set used 16-bit words to encode
-instructions. Of course this meant that Loading a 16-bit immediate into the ALU
-was impossible to encode with only a single instruction word. As a result every
+instructions. Of course this meant that loading a 16-bit immediate into the ALU
+was impossible to encode with only a single instruction word. As a result, every
 instruction that encoded an immediate other than 0 was encoded in two cells,
-which wasted a lot of code space. If this wasn't enough, the instruction set had
-a few instructions that would access three registers at a time. In these ugly
-cases you would have to choose one of the registers from the first three GPRs,
-which is just horrible.
+which wasted a lot of code space. If this wasn't enough, the instruction
+set had a few instructions that would access three registers at a time. In these
+ugly cases you would have to choose one of the registers from the first three
+GPRs, which is just horrible.
 
 The R2 has none of that madness. It has a 29-bit instruction set, the width of
 which is sufficient to encode both 16-bit immediate operands and register names
-without compromises. Of course you may come across cases when the instruction
-set can't handle a particular combination of operands, but those cases are far
-fewer and far less likely to be annoying than they were in the R1. 
+without compromises. Of course you may come across cases in which the
+instruction set can't handle a particular combination of operands, but those
+cases are far fewer and far less likely to be annoying than they were in the R1. 
 
-Of course having an instruction set that is wider than writing code to RAM with
-using other code is is a royal pain. [Nevertheless it's possible][573], although
-I don't think it'd cause much of a problem if it weren't.
+Of course having an instruction set that is wider than the data path means that
+writing code to RAM with code is a royal pain.
+[Nevertheless it's possible][573], although I don't think it'd cause much of a
+problem if it weren't.
 
 ### Single chamber RAM
 
@@ -417,7 +420,7 @@ sounds a bit like DMA.
 
 The idea is that whenever memory is accessed through a register, the value in
 the register is incremented after use or decremented before use. There are of
-course other options but this us what usually makes the most sense. This could
+course other options but this is what usually makes the most sense. This could
 eliminate the need for dedicated stack instructions (except for `call`) while
 providing even more versatile operand modes in general.
 
@@ -428,7 +431,7 @@ Combine this with memory mapped I/O. One word per frame throughput, anyone?
 There's only so much overhead you can eliminate with loop unrolling. It hurts
 to see that the naive implementation of `memcpy` has a throughput of only one
 word per six frames or 1:6 on the R2. You can get about 4:10 or more if you can
-afford unrolling but that's still not the optimal 1:2 I'd like to have. By
+afford unrolling but that's still not the optimal 1:1 I'd like to have. By
 sophisticated loop control I mean zero loop overhead. This is possible, one just
 has to be smart about it.
 
@@ -446,11 +449,11 @@ like these probably wouldn't hurt.
 ### Better flag support for chained shifts
 
 For a while I thought chaining only made sense in the case of addition and, to
-some extent, shifts, so I built the R2 with full support for chained addition
-and limited flag support for chained shifts. Then I came across a case where it
-would have been really awesome to be able to decide if a 32-bit number that I
-just shifted to the left ended up being zero or not, except the way the shifter
-in the R2 works doesn't allow that.
+some extent, shifts, so I built the R2 with full flag support for chained
+addition and limited flag support for chained shifts. Then I came across a case
+in which it would have been really awesome to be able to decide if a 32-bit
+number that I just shifted to the left ended up being zero or not, except the
+way the shifter in the R2 works didn't allow that. I want something better.
 
 ### Shift-and-add engine
 
@@ -481,14 +484,16 @@ the program already loaded into RAM.
 
 This unfortunately does mean that programs have to make sure to clean the RAM
 before they start doing anything in it as the contents of the cartridge no
-longer overwrites everything in the RAM, resetting it to a known good state.
+longer overwrite everything in the RAM, resetting it to a known good state.
 Because there is no cartridge, obviously.
 
 ### Start button
 
 For most programs you'll probably only need to use the left button on the front
-panel. This is the Start button, which starts or resumes the execution of the
-program loaded into RAM.
+panel. This is the Start button, which starts the execution of the program
+loaded into RAM. A program may decide to stop execution by executing a special
+instruction. If you want to resume execution after that, this button can do that
+too.
 
 ### Reset button
 
@@ -496,11 +501,10 @@ There right button on the front panel is the Reset button, which stops the
 execution of the program loaded into RAM and resets the instruction pointer to
 zero. It does absolutely nothing else. Pressing this button is the only way to
 stop the execution of the program manually. (The program itself can request
-to be stopped too.)
-
-This means that if you want to examine your program while it's running, you have
-to pause the simulation or insert [breakpoints][529] where you want to break
-execution and resume execution later with the Start button.
+to be stopped too.) This means that if you want to examine your program while
+it's running, you have to pause the simulation or insert [breakpoints][529]
+where you want to break execution and resume execution later with the Start
+button.
 
 ### Running indicator
 
@@ -526,8 +530,8 @@ A table with all the operations is provided below for fast navigation. Note
 that execution always takes 1 frame longer than specified below if one of the
 operands is a memory address. Also note that some of the descriptions of the
 conditional jumps may be confusing, for example _jump if not below or equal_.
-In these cases the condition is the exact opposite of the same condition without
-the _not_.
+In these cases, the condition is the exact opposite of the same condition
+without the _not_.
 
 Classifying operations by how they take operands yields four different classes,
 called _Class 0_, _Class 1_, _Class 1*_ and _Class 2_. Operations in different
@@ -695,20 +699,22 @@ examples of different instructions using different operand modes.
 
 ```r2asm
 start:
-    mov sp, 0         ; * Zero out sp.
-    mov r7, .loop     ; * Copy the cell of .loop into r7.
-    push 14           ; * Push the integer 14.
+    mov sp, 0         ; * Zero out sp (1 frame).
+    mov r7, .loop     ; * Copy the cell of .loop into r7 (1 frame).
+    push 14           ; * Push the integer 14 (2 frames).
 .loop:
     shl r4, [r11]     ; * Shift the bits in r4 left by whatever is at the
-                      ;   cell pointed to by r11.
+                      ;   cell pointed to by r11 (2 frames).
     scl r5, [r12]     ; * Chain-shift the bits in r5 left by whatever is at the
-                      ;   cell pointed to by r12.
+                      ;   cell pointed to by r12 (2 frames).
     send [r5-88], r3  ; * Send the value in r3 on the port whose number matches
-                      ;   the value at the cell pointed to by r5-88.
-    pop [r4+r9]       ; * Pop a value into the cell pointed to by r4+r9.
-    add r13, [sp]     ; * Move the value on the top of the stack to r13.
-    hlt               ; * Halt and wait for a resume.
-    jmp r7            ; * Jump to whatever is stored in r7.
+                      ;   the value at the cell pointed to by r5-88 (2 frames).
+    pop [r4+r9]       ; * Pop a value into the cell pointed to by r4+r9
+                      ;   (3 frames).
+    add r13, [sp]     ; * Move the value on the top of the stack to r13
+                      ;   (2 frames).
+    hlt               ; * Halt and wait for a resume (1 frame).
+    jmp r7            ; * Jump to whatever is stored in r7 (1 frame).
 ```
 
 Often in this section it's stated that flags are updated according to the
@@ -732,13 +738,12 @@ operand. Flags are updated according to the value copied.
 ```r2asm
 and primary, secondary  ; * Bitwise AND.
 test primary, secondary ; * Non-storing bitwise AND, also called bit test.
+ands primary, secondary ; * Same.
 ```
 
 `and` does a bitwise AND on the values in its operands and stores the result in
 its primary operand. Flags are updated according to this result. `test` is the
-non-storing version of `and`.
-
-`ands` is an alias for `test`.
+non-storing version of `and`, while `ands` is an alias for `test`.
 
 ### OR, ORS -- bitwise OR
 
@@ -784,10 +789,12 @@ signed overflow by setting the overflow flag. These flags are reset otherwise.
 ### SUB, SBB, CMP, CMB -- subtract and compare
 
 ```r2asm
-sub primary, secondary ; * Subtract.
-sbb primary, secondary ; * Subtract with borrow.
-cmp primary, secondary ; * Compare (or non-storing subtract).
-cmb primary, secondary ; * Compare with borrow (uncommon).
+sub primary, secondary  ; * Subtract.
+sbb primary, secondary  ; * Subtract with borrow.
+cmp primary, secondary  ; * Compare (or non-storing subtract).
+subs primary, secondary ; * Same.
+cmb primary, secondary  ; * Compare with borrow (uncommon).
+sbbs primary, secondary ; * Same.
 ```
 
 `sub` subtracts the value in its secondary operand from the value in its primary
@@ -795,12 +802,10 @@ operand and stores the result in its primary operand. Flags, including carry and
 overflow, are updated according to this result. `sbb` does the same, except it
 subtracts the carry flag from the result too; the carry flag is worth a 1 if set
 or a 0 if unset. `cmp` and `cmb` are the non-storing versions of `sub` and
-`sbb`, respectively.
+`sbb`, while `subs` and `sbbs` are aliases for `cmp` and `cmb`, respectively.
 
 These instruction report an unsigned overflow by setting the carry flag and a
 signed overflow by setting the overflow flag. These flags are reset otherwise.
-
-`subs` and `sbbs` are aliases for `cmp` and `cmb`, respectively.
 
 ### SWM -- set write mask
 
@@ -811,8 +816,8 @@ swm primary ; * Set write mask.
 `swm` stores the 13 least significant bits of the value in its primary operand
 in a write-only 13-bit register, called the _write mask_. When a 16-bit value is
 written into RAM, the 13 bits that would otherwise be undefined or empty are
-taken from this register. This makes it possible to write to the full 29 bits of
-a FILT cell, thus also making it possible for code to write code.
+taken from this register. This makes it possible to write to all 29 bits of a
+FILT cell, thus also making it possible for code to write code.
 
 By the way, `swm` is the non-storing version of `mov`, which would be so useless
 otherwise that it's perfect for a purpose like this. Still, flags are updated
@@ -837,12 +842,13 @@ jnz primary ; * Conditional jump example: jump if not zero.
 ```
 
 `jmp` unconditionally copies its the value in its primary operand into the
-instruction pointer. `jn` literally never does that. All other `j*` instructions
-do the same if a specific condition is met. These conditions are combinations of
-the carry flag (`C`), the overflow flag (`O`), the zero flag (`Z`) and the sign
-flag (`S`). Below is a mapping of such conditions to instruction mnemonics,
-including the constant `true` for `jmp` and the constant `false` for `jn`.
-See the [huge table][005] for conditions translated to English or
+instruction pointer. All other `j*` instructions except `jn` do the same if a
+specific condition is met. `jn` literally never does anything (and in fact the
+stock assembler maps `nop` to `jn r0`). Jump conditions are combinations of the
+states of the carry flag (`C`), the overflow flag (`O`), the zero flag (`Z`) and
+the sign flag (`S`). Below is a mapping of such conditions to instruction
+mnemonics, including the constant `true` for `jmp` and the constant `false` for
+`jn`. See the [huge table][005] for conditions translated to English or
 [this page][582] for almost the same mapping.
 
 [582]: http://unixwiz.net/techtips/x86-jumps.html
@@ -876,7 +882,8 @@ nop ; * Do nothing.
 `nop` simply does nothing. Under the hood it's `jn r0`, which is a fun and
 useless instruction. You could also use `mov r0, r0` for `nop`, which is the
 "blank" instruction whose opcode is `0x20000000`, but that updates flags
-according to the value in `r0`, so it doesn't exactly do nothing.
+according to the value in `r0`, so it does _something_, which is against the
+principles of a proper no-operation instruction.
 
 ### SHL, SHR, SCL, SCR -- shift
 
@@ -888,17 +895,17 @@ scr primary, secondary ; * Chained shift right.
 ```
 
 `shl` shifts left the bits in its primary operand by an amount taken from the
-lest significant 4 bits of its secondary operand. `shr` does the same, except it
-shifts right. Bits shifted out are discarded, the bits shifted in on the other
-side are all zeroes.
+least significant 4 bits of its secondary operand. `shr` does the same, except
+it shifts right. Bits shifted out are discarded, the bits shifted in on the
+other side are all zeroes.
 
 `scl` does the same as `shl`, except the bits shifted in are the most
 significant bits of the primary operand of the immediately previous shifting
 instruction, which usually means a leading `shl` or another `scl`. The relation
 between `scr` and `shr` is similar.
 
-Note that having "holes", that is, non-shifting instructions between
-instructions of one long chained shift produces undefined behaviour. Why this
+Note that having "holes", that is, non-shifting instructions between the
+instructions of a long chained shift produces undefined behaviour. Why this
 is the case is explained [here][580].
 
 [580]: #Chained.rotations
@@ -927,8 +934,8 @@ bump primary ; * Send attention request.
 
 `bump` sets the Attention Request bit for a single frame on the virtual I/O port
 whose number matches the value in the primary operand. The Attention Request bit
-resets the next frame if another `bump` that accesses the same port is not
-encountered.
+resets the next frame unless another `bump` that accesses the same port is
+executed.
 
 The peripheral on the other end of the port may not detect the attention request
 if it's checking the Attention Request bit out of phase with the R2.
@@ -944,11 +951,11 @@ wait primary ; * Check for attention request.
 ```
 
 `wait` checks if the Attention Request bit is set on any virtual I/O port. If no
-such port exists, `wait` store -1 in its primary operand. If such ports
-do exist, the number of the one with the highest precedence is stored in the
-primary operand. Due to -1 being returned in the first case and the valid range
-of port numbers, the sign flag of the result reflects whether an attention
-request was received or not.
+such port exists, `wait` stores -1 (`0xFFFF`) in its primary operand. If such
+ports do exist, the number of the one with the highest precedence is stored in
+the primary operand. Due to -1 being returned in the first case and the valid
+range of port numbers being 0 through 255, the sign flag of the result reflects
+whether an attention request was received or not.
 
 The R2 may not detect the attention request if it's checking the Attention
 Request bit out of phase with the peripheral on the other end of the port.
@@ -963,7 +970,8 @@ send primary, secondary ; * Send raw data.
 `send` sets the Raw Data bit for a single frame on the virtual I/O port whose
 number matches the primary operand, and redirects the value in the secondary
 operand to this port. The Raw Data bit resets and the redirected data disappears
-the next frame if another `send` that accesses the same port is not encountered.
+the next frame unless another `send` that accesses the same port and sends the
+same raw data is encountered.
 
 The peripheral on the other end of the port may not detect the data sent
 if it's checking the Raw Data bit out of phase with the R2.
@@ -1014,11 +1022,11 @@ call primary ; * Call subroutine.
 ```
 
 `call` copies the value in its primary operand into the instruction pointer and
-[pushes][561] the address of the instruction immediately following it to the
-stack. A later `ret` may pop the value pushed by `call`, handling execution back
-to the code after the `call`. In this case, the `call` is considered a
-subroutine call. Of course it can be used for all sorts of weird stuff too,
-if you're into that.
+[pushes][561] the address of the instruction immediately following the `call`
+itself onto the stack. A later `ret` may pop the value pushed by `call`,
+handling execution back to the code after the `call`. In this case, the `call`
+is considered a subroutine call. Of course it can be used for all sorts of weird
+stuff too, if you're into that.
 
 ### RET -- return from subroutine
 
@@ -1036,7 +1044,7 @@ subroutine return. Like `call`, `ret` can also be used for weird stuff.
 ## Programming
 
 _This section won't teach you assembly._ You'll have to learn that elsewhere,
-sorry. It's really fun and worth learning in my opinion. But f you don't know
+sorry. It's really fun and worth learning in my opinion. But if you don't know
 any, don't give up yet, I still may write a C compiler in Lua for this thing.
 You bet I'm crazy enough to do that.
 
@@ -1051,7 +1059,7 @@ loadfile("/path/to/r2asm.lua")("/path/to/code.asm")
 ```
 
 in the TPT console (which will get the job done, but it'll be difficult to read
-the error and warnings messages; read on for a solution).
+the error and warning messages; read on for a solution).
 
 [400]: https://github.com/LBPHacker/R216/blob/master/r2asm.lua
     "Assembler the R216 on GitHub"
@@ -1147,7 +1155,7 @@ unless specified otherwise, they all follow a common pattern:
   operation is set, unset otherwise;
 * the carry flag is set if the operation produces a carry, unset otherwise
   (what producing a carry means depends on the operation);
-* the overflow flag is set if the operation results in a signed overflow, unset
+* the overflow flag is set if the operation results in an overflow, unset
   otherwise (again, what this means depends on the operation).
 
 Operations that don't explicitly state what producing a carry or an overflow
@@ -1214,12 +1222,13 @@ bits that are rotated out of `r7` are rotated back into `r4`) are a bit
 trickier. In fact the R2 provides no hardware support for this, so we have to be
 smart about it.
 
-The shifter in R2 implements chained shifts by saving the value of the last
-primary operand on the internal operand bus. This means that an `scl` has access
-to all the bits of the primary operand of a previous shifting instruction (and,
-really, any instruction; this is why chained shifts with holes are not supported
-and yield unexpected results). `scl` and friends simply shift these bits in the
-other direction and merge them with whatever they get as their primary operands.
+The shifter in the R2 implements chained shifts by saving the value of the
+primary operand of the last instruction executed. This means that an `scl` has
+access to all the bits of the primary operand of a previous shifting instruction
+(and, really, any instruction; this is why chained shifts with holes are not
+supported and yield unexpected results). `scl` and friends simply shift these
+bits in the other direction and merge them with whatever they get as their
+primary operands.
 
 We can abuse this to implement a chained rotation like this:
 
@@ -1252,7 +1261,7 @@ the R2 by setting the ctype of a FILT particle in them to `0x1??00000`, where
 The FILT particle can be identified by its temperature: it's around 4000C and
 shows up yellow in heat view. The same applies to the stripped-down version of
 the breakout box built into the R2, which exposes port 0; the ctype of the FILT
-particle here is `0x10000000` (though changing it is not recommended).
+particle in that is `0x10000000` (and changing it is not recommended).
 
 As stated before, any number of breakout boxes may be connected to the
 expansion interface; in other words breakout boxes are stackable. The
@@ -1262,7 +1271,7 @@ same bus leads to undefined behaviour.
 
 There's a fundamental difference between how the R1 and the R2 handle
 peripherals: the R1 blocks while waiting for [raw data][562] or an
-[an attention request][575] (in fact it almost completely turns off) while the
+[attention request][575] (in fact it almost completely turns off) while the
 R2 simply sets flags depending on the result of checking for either of those
 two for a single frame. More on this in the [Instruction reference][005].
 
@@ -1275,8 +1284,8 @@ explicitly when data is received.
 
 ### Asynchronous I/O protocol
 
-The fact that the R2 doesn't wait block when checking for attention requests or
-raw data on a port might by scary at first, but everything can be done with the
+The fact that the R2 doesn't block when checking for attention requests or
+raw data on a port might by scary at first, but everything can be done with
 non-blocking instructions too. In fact, the thing that should give you the most
 trouble is synchronising up the computer and the peripheral (which may be
 another computer). This section won't tell you how to solve every problem
@@ -1297,7 +1306,7 @@ tightest loop you can have is a 2-cycle one. Okay, let's go with that:
 
 The problem with that is that if the peripheral sends only one attention
 request, we might miss that. The solution is to make the peripheral send two.
-No, I'm not kidding. Just send one right after another. In fact it's better to
+No, I'm not kidding. Just send one right after the first. In fact it's better to
 just make the peripheral send attention requests until it gets one back
 (a bump).
 
@@ -1339,4 +1348,5 @@ started with synchronisation though.
 ## Changelog
 
 * 07-07-2018: Initial release
+* 18-07-2018: Revision #1: typo and wording fixes
 
