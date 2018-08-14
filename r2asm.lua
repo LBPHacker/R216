@@ -54,6 +54,11 @@ local redirect_log, headless_out_bin
 
 -- * Shadow print. This forces me to use one of the functions defined below.
 local print_ = print
+if not tpt then
+    print_ = function(stuff)
+        io.stderr:write(stuff .. "\n")
+    end
+end
 local function print_log(sugar, no_sugar, str)
     if redirect_log then
         redirect_log:write(no_sugar .. str .. "\n")
@@ -863,10 +868,6 @@ local function assemble_source()
     for line, width in pairs(truncated) do
         print_wl(line, "immediate value truncated to %i bits", width)
     end
-    
-    if named_args["headless_out"] then
-        headless_out_bin:close()
-    end
 
     -- * Bail out if anything nasty happened.
     if errors_encountered then
@@ -921,6 +922,10 @@ xpcall(function()
     end
     if not flasher(qrtz_anchor_id, target_model_number, machine_code) then
         return
+    end
+
+    if named_args["headless_out"] then
+        headless_out_bin:close()
     end
 
     -- * We're allowed to feel good now.
