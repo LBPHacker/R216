@@ -677,9 +677,9 @@ denotes a register (with a 4-bit name), `U16` a 16-bit unsigned integer, `U11` a
 | `OPER REG_R1, [REG_RB+U11_I1]` | 2   | `0x00B00000` |  0 |    | 16 |  4 |    |
 | `OPER REG_R1, [REG_RB-U11_I1]` | 2   | `0x00B08000` |  0 |    | 16 |  4 |    |
 | `OPER [REG_R1], REG_R2`        | 2   | `0x00400000` |  0 |  4 |    |    |    |
-| `OPER [REG_RB+REG_R1], REG_R2` | 2   | `0x00C08000` |  0 |  4 | 16 |    |    |
+| `OPER [REG_RB+REG_R1], REG_R2` | 2   | `0x00C00000` |  0 |  4 | 16 |    |    |
 | `OPER [REG_RB-REG_R1], REG_R2` | 2   | `0x00C08000` |  0 |  4 | 16 |    |    |
-| `OPER [U16_I1], REG_R2`        | 2   | `0x00500000` |    |  0 |    |    |    |
+| `OPER [U16_I1], REG_R2`        | 2   | `0x00500000` |    |  0 |    |  4 |    |
 | `OPER [REG_RB+U11_I1], REG_R2` | 2   | `0x00D00000` |    |  0 | 16 |  4 |    |
 | `OPER [REG_RB-U11_I1], REG_R2` | 2   | `0x00D08000` |    |  0 | 16 |  4 |    |
 | `OPER [REG_R1], U16_I1`        | 2   | `0x00600000` |  0 |    |    |  4 |    |
@@ -845,8 +845,8 @@ jnz primary ; * Conditional jump example: jump if not zero.
 instruction pointer. All other `j*` instructions except `jn` do the same if a
 specific condition is met. `jn` literally never does anything (and in fact the
 stock assembler maps `nop` to `jn r0`). Jump conditions are combinations of the
-states of the carry flag (`C`), the overflow flag (`O`), the zero flag (`Z`) and
-the sign flag (`S`). Below is a mapping of such conditions to instruction
+states of the carry flag (`Cf`), the overflow flag (`Of`), the zero flag (`Zf`)
+and the sign flag (`Sf`). Below is a mapping of such conditions to instruction
 mnemonics, including the constant `true` for `jmp` and the constant `false` for
 `jn`. See the [huge table][005] for conditions translated to English or
 [this page][582] for almost the same mapping.
@@ -854,24 +854,24 @@ mnemonics, including the constant `true` for `jmp` and the constant `false` for
 [582]: http://unixwiz.net/techtips/x86-jumps.html
     "Intel x86 JUMP quick reference"
 
-| Mnemonics           | Condition          |
-| ------------------- | ------------------ |
-| `jmp`               | `true`             |
-| `jn`                | `false`            |
-| `jb`, `jnae`, `jc`  | `C == 1`           |
-| `jnb`, `jae`, `jnc` | `C == 0`           |
-| `jo`                | `O == 1`           |
-| `jno`               | `O == 0`           |
-| `js`                | `S == 1`           |
-| `jns`               | `S == 0`           |
-| `je`, `jz`          | `Z == 1`           |
-| `jne`, `jnz`        | `Z == 0`           |
-| `jle`, `jng`        | `Z == 1 || S != O` |
-| `jnle`, `jg`        | `Z == 0 && S == O` |
-| `jl`, `jnge`        | `S != O`           |
-| `jnl`, `jge`        | `S == O`           |
-| `jbe`, `jna`        | `C == 1 || Z == 1` |
-| `jnbe`, `ja`        | `C == 0 && Z == 0` |
+| Mnemonics           | Condition             |
+| ------------------- | --------------------- |
+| `jmp`               | `true`                |
+| `jn`                | `false`               |
+| `jb`, `jnae`, `jc`  | `Cf == 1`             |
+| `jnb`, `jae`, `jnc` | `Cf == 0`             |
+| `jo`                | `Of == 1`             |
+| `jno`               | `Of == 0`             |
+| `js`                | `Sf == 1`             |
+| `jns`               | `Sf == 0`             |
+| `je`, `jz`          | `Zf == 1`             |
+| `jne`, `jnz`        | `Zf == 0`             |
+| `jle`, `jng`        | `Zf == 1 || Sf != Of` |
+| `jnle`, `jg`        | `Zf == 0 && Sf == Of` |
+| `jl`, `jnge`        | `Sf != Of`            |
+| `jnl`, `jge`        | `Sf == Of`            |
+| `jbe`, `jna`        | `Cf == 1 || Zf == 1`  |
+| `jnbe`, `ja`        | `Cf == 0 && Zf == 0`  |
 
 ### NOP -- do nothing
 
@@ -1204,6 +1204,24 @@ start:
     hlt               ; * 0x30000000
     jmp r7            ; * 0x31000070
 ```
+
+There exist opcodes that are not documented. For example, you'd never get the
+opcode `0x200DED01` from the above calculation, even though it's a perfectly
+valid opcode (it's in fact `mov r1, r0`, just like `0x20000001` is). This is
+because operand modes may not define the purpose of some bits in the opcode, and
+as such it's up to the user (or an assembler) to decide whether to make those
+bits zeroes or ones. The tables in this manual are crafted so that these
+undefined bits are always zeroed out.
+
+So once the R2 recognises an operand mode, it knows which bits to ignore. These
+bits have no effect on the operation and may be chosen to be zeroes or ones
+arbitrarily. That leaves the question of undefined operand modes. Those with
+keener eyes may notice that operand modes `0x00800000` and `0x00A00000` are
+missing from the operand mode table. This doesn't mean that they are undefined,
+they are just not documented and in fact they behave exactly like modes
+`0x00000000` and `0x00200000`, respectively. In other words, there are no
+undefined operand modes. This means that the R2 should be able to handle
+whatever combination of 29 bits you throw at it.
 
 ### Chained rotations
 

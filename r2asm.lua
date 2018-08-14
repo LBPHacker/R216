@@ -1,21 +1,56 @@
+#!/usr/bin/env lua
+
 -- * This is a really ugly assembler. I wanted to write a much better one for
 --   the R2, but I didn't have the time. Or, rather, I would have had to
 --   postpone publishing the R2. I really, really didn't want to do that, so
 --   much that I made peace with having to write a bad assembler instead.
 --        -- LBPHacker
 
--- * `source_path` is, unsurprisingly enough, the path to the assembly source.
--- * `target_cpu_id` is a FILT ctype used to select which CPU to upload the
---   program to; all my computers have a QRTZ particle whose ctype is
---   0x1864A205, and on the right of this is a row of FILT that stores in ctype
---   the model number of the CPU in a zero-terminated ASCII string, which the
---   assembler looks for; if it finds more than one supported CPU in the
---   simulation, it reads the ctype of the FILT particle on the *left* of this
---   QRTZ particle and matches it against `target_cpu_id`.
--- * `log_path` is the path to the file the log should be redirected to.
-local source_path, target_cpu_id, log_path = ...
+-- * I don't care that ipairs is deprecated. Using ipairs is way more concise
+--   than the whole for x = 1, # do ... end dance where every time I need the
+--   thing at index x I must use [x]. Chances are I end up caching it into a
+--   local anyway and then I might as well just use a damn iterator.
+local function ipairs(tbl_param)
+    return function(tbl, idx)
+        idx = (idx or 0) + 1
+        if #tbl >= idx then
+            return idx, tbl[idx]
+        end
+    end, tbl_param
+end
 
-local redirect_log
+local named_args = {}
+local unnamed_args = {}
+for ix, arg in ipairs({...}) do
+    local key, value = arg:match("^([^=]+)=(.-)$")
+    if key then
+        named_args[key] = value
+    else
+        table.insert(unnamed_args, arg)
+    end
+end
+
+-- * A list of unnamed arguments:
+--   * `source_path` is, unsurprisingly enough, the path to the assembly source.
+--   * `target_cpu_id` is a FILT ctype used to select which CPU to upload the
+--     program to; all my computers have a QRTZ particle whose ctype is
+--     0x1864A205, and on the right of this is a row of FILT that stores in
+--     ctype the model number of the CPU in a zero-terminated ASCII string,
+--     which the assembler looks for; if it finds more than one supported CPU in
+--     the simulation, it reads the ctype of the FILT particle on the *left* of
+--     this QRTZ particle and matches it against `target_cpu_id`.
+--   * `log_path` is the path to the file the log should be redirected to.
+-- * A list of named arguments:
+--   * `headless_model` switches the assembler to non-TPT mode; that is, no TPT
+--     API will be called and the opcodes will be flashed to /dev/stdout by
+--     default (each opcode as 4 bytes in little endian).
+--   * `headless_out` overrides the /dev/stdout default for the above named
+--     argument.
+local source_path, target_cpu_id, log_path = unpack(unnamed_args)
+
+-- * File handles that are written to if they are open. Weird mechanism, but it
+--   works perfectly.
+local redirect_log, headless_out_bin
 
 -- * Shadow print. This forces me to use one of the functions defined below.
 local print_ = print
@@ -23,17 +58,17 @@ local function print_log(sugar, no_sugar, str)
     if redirect_log then
         redirect_log:write(no_sugar .. str .. "\n")
     else
-        print_(sugar .. str)
+        print_((tpt and sugar or no_sugar) .. str)
     end
 end
 local function print_e(...)
-    print_log("\008l[r2asm] \008w", "[r2asm] ", string.format(...))
+    print_log("\008l[r2asm] \008w", "[r2asm] [EE] ", string.format(...))
 end
 local function print_w(...)
-    print_log("\008o[r2asm] \008w", "[r2asm] ", string.format(...))
+    print_log("\008o[r2asm] \008w", "[r2asm] [WW] ", string.format(...))
 end
 local function print_i(...)
-    print_log("\008t[r2asm] \008w", "[r2asm] ", string.format(...))
+    print_log("\008t[r2asm] \008w", "[r2asm] [II] ", string.format(...))
 end
 local print = nil
 
@@ -44,19 +79,6 @@ if log_path then
     else
         print_w("failed redirect log: %s", err)
     end
-end
-
--- I don't care that ipairs is deprecated. Using ipairs is way more concise than
--- the whole for x = 1, # do ... end dance where every time I need the thing at
--- index x I must use [x]. Chances are I end up caching it into a local anyway
--- and then I might as well just use a damn iterator.
-local function ipairs(tbl_param)
-    return function(tbl, idx)
-        idx = (idx or 0) + 1
-        if #tbl >= idx then
-            return idx, tbl[idx]
-        end
-    end, tbl_param
 end
 
 
@@ -77,16 +99,38 @@ local supported_models = {
         ram_width = 128,
         ram_height = 32
     },
+    ["R216DVM"] = {
+        flash_mode = "headless_bin",
+        ram_size = 65536
+    }
 }
 local supported_flash_modes = {
-    ["skip_one_rtl"] = function(anchor, model, code)
-        local handle = io.open("r2.2.dump", "w")
-        for ix = 1, #code do
-            handle:write(("0x%08X\n"):format(code[ix]))
+    ["headless_bin"] = function(anchor, model, code)
+        -- * The headless_bin mode is a model-agnostic mode which writes the
+        --   opcodes to a file as little-endian 4-byte values. See the
+        --   `headless_model` named argument way above in the source.
+
+        local model_data = supported_models[model]
+        if model_data.ram_size then
+            -- * Pad remaining cells with 0x20000000 (if we know how many cells
+            --   to pad to).
+            for ix = #code + 1, model_data.ram_size do
+                table.insert(code, 0x20000000)
+            end
         end
-        handle:close()
 
+        -- * Write opcodes to `headless_out_bin` as little-endian 4-byte values.
+        for ix, opcode in ipairs(code) do
+            for bx = 1, 4 do
+                headless_out_bin:write(string.char(opcode % 0x100))
+                opcode = math.floor(opcode / 0x100)
+            end
+        end
 
+        -- * Flashing succeeded.
+        return true
+    end,
+    ["skip_one_rtl"] = function(anchor, model, code)
         -- * The skip_one_rtl mode writes to the RAM from left to right, top to
         --   bottom when a row is filled. Due to the way some RAMs work, this
         --   mode tolerates if at most one particle is missing from the row.
@@ -536,7 +580,23 @@ local function assemble_source()
         end
     end
 
-    -- * Try to load the source first, bail out if we can't.
+    -- * Try to open the headless output if required, bail out if we can't.
+    if named_args["headless_model"] then
+        -- * Default to /dev/stdout (it's not a real default of the named
+        --   argument but rather a default of the file handle, so it'll work on
+        --   systems where /dev/stdout doesn't exist).
+        headless_out_bin = io.stdout
+        if named_args["headless_out"] then
+            local err
+            headless_out_bin, err = io.open(named_args["headless_out"], "wb")
+            if not headless_out_bin then
+                print_e("failed to open headless output: %s", err)
+                return
+            end
+        end
+    end
+
+    -- * Try to load the source, bail out if we can't.
     local source
     do
         local handle, err = io.open(source_path, "r")
@@ -803,6 +863,10 @@ local function assemble_source()
     for line, width in pairs(truncated) do
         print_wl(line, "immediate value truncated to %i bits", width)
     end
+    
+    if named_args["headless_out"] then
+        headless_out_bin:close()
+    end
 
     -- * Bail out if anything nasty happened.
     if errors_encountered then
@@ -820,11 +884,19 @@ end
 xpcall(function()
 
     -- * First we figure out where the CPU is.
-    -- * `qrtz_anchor_id` gets assigned the id of the QRTZ particle in the CPU
-    --   selected, if there's any.
-    local qrtz_anchor_id, target_model_number = get_cpu()
-    if not qrtz_anchor_id then
-        return
+    local qrtz_anchor_id, target_model_number
+    if named_args["headless_model"] then
+        -- * `qrtz_anchor_id` is left empty as we're not even running under TPT,
+        --   as apparent from the fact that the headless_model named parameter
+        --   was passed.
+        target_model_number = named_args["headless_model"]
+    else
+        -- * `qrtz_anchor_id` gets assigned the id of the QRTZ particle in the
+        --   CPU selected, if there's any.
+        qrtz_anchor_id, target_model_number = get_cpu()
+        if not qrtz_anchor_id then
+            return
+        end
     end
 
     -- * Then we assembler the source into an array of ctypes.
@@ -835,7 +907,12 @@ xpcall(function()
     end
 
     -- * Finally we try to "flash" the machine code.
-    local flash_mode = supported_models[target_model_number].flash_mode
+    local flash_mode
+    if headless_out_bin then
+        flash_mode = "headless_bin"
+    else
+        flash_mode = supported_models[target_model_number].flash_mode
+    end
     local flasher = supported_flash_modes[flash_mode]
     if not flasher then
         print_e("flash mode not supported")
@@ -857,7 +934,8 @@ end)
 
 -- * Yay, we're done.
 if redirect_log then
-    print_("\008t[r2asm] \008wlog written to " .. log_path)
     redirect_log:close()
+    redirect_log = nil
+    print_i("log written to %s", log_path)
 end
-print_("\008t[r2asm] \008wfinished assembling")
+print_i("finished assembling")
