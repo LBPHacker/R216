@@ -85,10 +85,10 @@ start:
     mov r0, [sp+2]            ; * Move B into r0_32.
     mov r1, [sp+3]
     mov r2, 0x8000
-    xor [sp+3], r2            ; * Both r0_32 and the old B on the stack becomes
-    mov r2, r0                ;   -B. Stack is ($, 2A, -B, 4AC).
-    mov r3, r1                ; * Copy -B into r2_32.
-    call float_multiply       ; * Multiply -B and -B, yielding B**2.
+    xor [sp+3], r2            ; * The old B on the stack becomes -B. Stack is
+    mov r2, r0                ;   ($, 2A, -B, 4AC).
+    mov r3, r1                ; * Copy B into r2_32.
+    call float_multiply       ; * Multiply B with itself, yielding B**2.
     call .bump_progress_bar
     pop r2
     pop r3                    ; * Pop 4AC into r2_32, stack is ($, 2A, -B).
@@ -536,7 +536,7 @@ float_from_string:
                               ;   first streak of zeroes. If this is the case,
                               ;   continue skipping zeroes here.
     ors r9, r4                ; * The ors here clears the zero flag if either
-    jnz .no_2nd_ignore_zeroes ;   the dot hasn't been read yet or if all the
+    jnz .no_3rd_ignore_zeroes ;   the dot hasn't been read yet or if all the
                               ;   leading zeroes have been skipped, derived from
                               ;   the fact that r4 is more than 0.
     sub r5, 1                 ; * Decrement r5 if the dot has already been read.
@@ -544,6 +544,10 @@ float_from_string:
     jmp .parse_digits         ;   significant digit counter.
 .no_2nd_ignore_zeroes:
     jb .parse_dot             ; * It's not a digit but it may still be a dot.
+.no_3rd_ignore_zeroes:        ; * We may arrive to this label after the ors
+                              ;   check above. This branch skips the jb above
+                              ;   because it'd act based on the flags we get
+                              ;   from the ors.
     cmp r1, 9                 ; * That's a '9' (we subtracted 0x30 earlier).
     ja .parse_dot             ; * It's not a digit but it may still be a dot.
     cmp r4, 7                 ; * The parser only guarantees a precision of
@@ -588,9 +592,9 @@ float_from_string:
     jmp .parse_digits
 .parse_exponent:
     mov r9, 0                 ; * r9 will hold the explicit base-10 exponent.
-    cmp [r0], 0x65            ; * That's an 'e'.
+    cmp [r0], 'e'
     je .seen_exponent_e
-    cmp [r0], 0x45            ; * That's an 'E'.
+    cmp [r0], 'E'
     jne .parse_done
 .seen_exponent_e:
     xor r8, 0x0001            ; * Flip explicit exponent bit in parser state.
@@ -976,8 +980,8 @@ float_to_string:
     mov r7, 1                 ;   notation unless the base-10 logarithm, held in
     cmp r5, -3                ;   r5, falls in the range [-3; 6].
     jl .emit_scientific       ; * When printing in scientific notation, 7 digits
-    cmp r5, 6                 ;   are printed. These are number from the right,
-    jg .emit_scientific       ;   the rightmost being the first.
+    cmp r5, 6                 ;   are printed. These are numbered from the
+    jg .emit_scientific       ;   right, the rightmost being the first.
     cmp r5, 0                 ; * r4 holds the digit after which the decimal
     jge .emit_default         ;   dot is to be printed. r6 is 0 if an explicit
                               ;   exponent is to be printed. r7 is 1 as long as
@@ -1004,7 +1008,7 @@ float_to_string:
     scl r9, 4                 ;   dots, leading zeroes and disabled exponents.
     mov r2, 7                 ; * The BCD emit loop iterates 7 times.
 .emit_bcd_loop:
-    mov r3, r9                ; * Extract digit from BCD, shift BCD up.
+    mov r3, r9                ; * Extract digit from BCD, shift BCD buffer up.
     shl r8, 4
     scl r9, 4
     shr r3, 12
@@ -1029,7 +1033,7 @@ float_to_string:
 .emit_bcd_done:
     test r6, r6               ; * Emit explicit exponent if r6 is 1.
     jnz .exit
-    mov [r0], 0x65            ; * That's an 'e'.
+    mov [r0], 'e'
     add r0, 1                 ; * Bump output pointer.
     test r5, r5
     jns .base10_exp_no_sign

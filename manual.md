@@ -497,7 +497,7 @@ too.
 
 ### Reset button
 
-There right button on the front panel is the Reset button, which stops the
+The right button on the front panel is the Reset button, which stops the
 execution of the program loaded into RAM and resets the instruction pointer to
 zero. It does absolutely nothing else. Pressing this button is the only way to
 stop the execution of the program manually. (The program itself can request
@@ -511,7 +511,7 @@ button.
 The green LCRY indicator on the front panel lights up when the program loaded
 into RAM is being executed. There's not much to be said about this, except that
 the definition of what is considered a state of execution is simpler in the case
-or the R2 than it was in the case of the R1. Unlike in the R1, this indicator
+of the R2 than it was in the case of the R1. Unlike in the R1, this indicator
 only turns off if execution really has ceased, and not when the core is checking
 for [raw data][562] or [an attention request][575] on an I/O port.
 
