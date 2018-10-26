@@ -104,6 +104,13 @@ local supported_models = {
         ram_width = 128,
         ram_height = 32
     },
+    ["R216K8B"] = {
+        flash_mode = "skip_one_rtl",
+        ram_x = 70,
+        ram_y = -147,
+        ram_width = 128,
+        ram_height = 64
+    },
     ["R216DVM"] = {
         flash_mode = "headless_bin",
         ram_size = 65536

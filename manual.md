@@ -1,6 +1,6 @@
 % R216 Manual and Instruction Reference
 % LBPHacker
-% 18-07-2018
+% 26-10-2018
 
 # R216 Manual and Instruction Reference
 
@@ -56,11 +56,12 @@ few of those limitations.
 [800]: /powdertoy/R16K1S60/manual.md
     "Manual and Instruction Reference for R16K1S60"
 
-This computer is none other than the **R2**. The two models that exist right now
-are the **R216K2A** and the **R216K4A**, which feature:
+This computer is none other than the **R2**. The three models that exist right
+now are the **R216K2A**, **R216K4A** and the **R216K8B**, of which the R216K2A
+features:
 
 * **subframe 16-bit architecture**, but of course;
-* **a RAM with 2048 or 4096 16-bit cells**, which also handles instructions;
+* **a RAM with 2048 16-bit cells**, which also handles instructions;
 * **29-bit instruction set**, meaning instructions fit a single code word;
 * **16 16-bit registers**, 14 of which are general purpose ones;
 * **shift, add and bitwise operations**, the usual ALU goodness;
@@ -71,37 +72,49 @@ are the **R216K2A** and the **R216K4A**, which feature:
 * **168×112 particle area**, which is pretty small;
 * some leftover magic from the things I usually do.
 
-These are only the highlights, everything is explained in detail at some point
-in the manual. Your best bet is to do some quick Ctrl+F woodoo if you'd rather
-not read through all of it.
+The three models are mostly identical except for the number of cells in the RAM;
+see the table below. These are only the highlights, everything is explained in
+detail at some point in the manual. Your best bet is to do some quick Ctrl+F
+woodoo if you'd rather not read through all of it.
 
-For the sake of completeness, here's the
-[R216K2A save page][897], the [relevant forum thread][898] and a
-[thing that opens the R216K2A save][896] directly in TPT if your TPT is
-configured properly. There's of course a [save page link][894] and a
-[TPT hotlink][893] for the R216K4A as well. Additionally, all headers are both
-anchors and links pointing to themselves, so feel free to copy them around and
-reference them anywhere.
+For the sake of completeness, here's the [R216K2A save page][897], the
+[relevant forum thread][898] and a [thing that opens the R216K2A save][896]
+directly in TPT if your TPT is configured properly. See a complete list of save
+links in the table below. Additionally, all headers are both anchors and links
+pointing to themselves, so feel free to copy them around and reference them
+anywhere.
+
+|  Model  | RAM size   | Save page    | TPT hotlink   |
+| ------- | ---------- | ------------ | ------------- |
+| R216K2A | 2048 cells | [https][897] | [ptsave][896] |
+| R216K4A | 4096 cells | [https][894] | [ptsave][893] |
+| R216K8B | 8192 cells | [https][891] | [ptsave][892] |
 
 While I like to think that my composing skills have improved a lot in the past
 few years, mistakes are inevitably made. As always, if you have anything
 in mind for this manual, be it a fix or an enhancement or whatever, feel free to
 bump me. This manual, among other things, [is on GitHub][899].
 
-[893]: ptsave:2305835#R216K4A
-    "Open R216K2A save"
-[894]: https://powdertoy.co.uk/Browse/View.html?ID=2305835
-    "The R216K4A save page"
 [895]: #RAM
     "Features in detail – RAM"
-[896]: ptsave:2303519#R216K2A
-    "Open R216K2A save"
-[897]: https://powdertoy.co.uk/Browse/View.html?ID=2303519
-    "The R216K2A save page"
 [898]: https://powdertoy.co.uk/Discussions/Thread/View.html?Thread=22833
     "The R216K2A forum thread"
 [899]: https://github.com/LBPHacker/R216/blob/master/manual.md
     "R216 Manual and Instruction Reference on GitHub"
+
+[897]: https://powdertoy.co.uk/Browse/View.html?ID=2303519
+    "The R216K2A save page"
+[894]: https://powdertoy.co.uk/Browse/View.html?ID=2305835
+    "The R216K4A save page"
+[891]: https://powdertoy.co.uk/Browse/View.html?ID=2342633
+    "The R216K8B save page"
+
+[896]: ptsave:2303519#R216K2A
+    "Open R216K2A save"
+[893]: ptsave:2305835#R216K4A
+    "Open R216K4A save"
+[892]: ptsave:2342633#R216K8B
+    "Open R216K8B save"
 
 
 
@@ -166,6 +179,8 @@ writes code. The R2 has a write-only 13-bit register, the contents of which are
 merged with whatever 16-bit value is written to RAM on a direct write.
 
 The R216K4A is very similar to the R216K2A model, except its RAM has 4096 cells.
+Likewise, the R216K8B has 8192 cells. I had to fiddle around with it a bit to
+squeeze that many cells in, hence the change in the suffix from A to B.
 
 ### Instruction set
 
@@ -1367,4 +1382,5 @@ started with synchronisation though.
 
 * 07-07-2018: Initial release
 * 18-07-2018: Revision #1: typo and wording fixes
+* 26-10-2018: R216K8B added to the list of models
 
