@@ -907,8 +907,8 @@ xpcall(function()
         end
     end
 
-    -- * Then we assembler the source into an array of ctypes.
-    -- * `machine_code` only gets assigned if the translation was succeeds.
+    -- * Then we assemble the source into an array of ctypes.
+    -- * `machine_code` only gets assigned if the translation succeeds.
     local machine_code = assemble_source()
     if not machine_code then
         return
@@ -923,9 +923,8 @@ xpcall(function()
     end
     local flasher = supported_flash_modes[flash_mode]
     if not flasher then
-        print_e("flash mode not supported")
-        print_i("this is a serious problem in the assembler")
-        return
+        -- * This shouldn't happen.
+        error("flash mode not supported")
     end
     if not flasher(qrtz_anchor_id, target_model_number, machine_code) then
         return
