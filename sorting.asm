@@ -14,7 +14,11 @@ start:
     jmp .menu_loop
 .main_menu:
     dw shuffle, "Shuffle", 0
+    dw quicksort, "Quicksort", 0
     dw heapsort, "Heapsort", 0
+    dw bubble_sort, "Bubble Sort", 0
+    dw insertion_sort, "Insertion S", 0
+    dw selection_sort, "Selection S", 0
     dw .shutdown, "Shutdown", 0
     dw 0
 .shutdown:
@@ -112,6 +116,144 @@ shuffle:
     dw .nothing, "Stop", 0
     dw 0
 .nothing:
+    ret
+
+
+
+
+; * Executes quicksort on the dataset.
+; * https://en.wikipedia.org/wiki/Quicksort
+quicksort:
+    call dataset.import
+    mov r4, 0
+    mov r5, [dataset.size]
+    sub r5, 1
+.recursive:
+    cmp r4, r5
+    jnb .recursive_done
+    call .partition
+    push r5
+    mov r5, r6
+    sub r5, 1
+    call .recursive
+    pop r5
+    push r4
+    mov r4, r6
+    add r4, 1
+    call .recursive
+    pop r4
+.recursive_done:
+    ret
+.partition:
+    mov r7, [dataset+r5]
+    mov r6, r4
+    mov r8, r4
+.partition_loop:
+    cmp r7, [dataset+r8]
+    jna .no_swap
+    mov r0, r6
+    mov r1, r8
+    call dataset.swap
+    add r6, 1
+.no_swap:
+    add r8, 1
+    cmp r8, r5
+    jne .partition_loop
+.partition_done:
+    mov r0, r6
+    mov r1, r5
+    call dataset.swap
+    ret
+
+
+
+
+; * Executes selection sort on the dataset.
+; * https://en.wikipedia.org/wiki/Selection_sort
+selection_sort:
+    call dataset.import
+    mov r9, [dataset.size]
+    sub r9, 2
+.outer_loop:
+    mov r8, r9
+    mov r0, r8
+    add r0, 1
+    mov r6, [dataset+r0]
+.inner_loop:
+    mov r1, [dataset+r8]
+    cmp r1, r6
+    jna .no_mark
+    mov r0, r8
+    mov r6, r1
+.no_mark:
+    sub r8, 1
+    jnc .inner_loop
+    mov r1, r9
+    add r1, 1
+    call dataset.swap
+    sub r9, 1
+    jnc .outer_loop
+    ret
+
+
+
+
+; * Executes insertion sort on the dataset.
+; * https://en.wikipedia.org/wiki/Insertion_sort
+insertion_sort:
+    call dataset.import
+    mov r9, [dataset.size]
+    mov r6, dataset
+    sub r6, 1
+    mov r8, 1
+.outer_loop:
+    cmp r8, r9
+    jnb .outer_done
+    mov r0, r8
+.inner_loop:
+    cmp r0, 0
+    jna .inner_done
+    mov r1, [r6+r0]
+    cmp r1, [dataset+r0]
+    jna .inner_done
+    mov r1, r0
+    sub r1, 1
+    call dataset.swap
+    sub r0, 1
+    jmp .inner_loop
+.inner_done:
+    add r8, 1
+    jmp .outer_loop
+.outer_done:
+    ret
+
+
+
+
+; * Executes bubble sort on the dataset.
+; * https://en.wikipedia.org/wiki/Bubble_sort
+bubble_sort:
+    call dataset.import
+    mov r9, [dataset.size]
+    mov r7, dataset
+    add r7, 1
+    sub r9, 1
+.outer_loop:
+    mov r8, r9
+    mov r0, 0
+.inner_loop:
+    mov r4, [dataset+r0]
+    cmp r4, [r7+r0]
+    jna .no_swap
+    mov r1, r0
+    add r1, 1
+    call dataset.swap
+.no_swap:
+    add r0, 1
+    sub r8, 1
+    jnz .inner_loop
+    sub r9, 1
+    jnz .outer_loop
     ret
 
 
