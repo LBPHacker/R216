@@ -382,6 +382,7 @@ clear_continuous:
 ; * r6 is cursor colour.
 ; * r10 is terminal port address.
 ; * r11 is cursor position.
+; * Character read is returned in r3.
 read_character_blink:
     mov r4, 0x7F              ; * r4 holds the current cursor character.
     mov r2, 8                 ; * r2 is the counter for the blink loop.
@@ -465,6 +466,8 @@ read_string:
 ; * Writes zero-terminated strings to the terminal.
 ; * r0 points to buffer to write from.
 ; * r10 is terminal port address.
+; * r11 is incremented by the number of characters sent to the terminal (which
+;   doesn't help at all if the string contains colour or cursor codes).
 write_string:
     mov r2, r0
 .loop:

@@ -1,3 +1,5 @@
+; * WORK IN PROGRESS, PLEASE IGNORE.
+
 start:
 	mov r10, 0
 	bump r10
