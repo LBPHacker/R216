@@ -130,12 +130,14 @@ quicksort:
     sub r5, 1
 .recursive:
     cmp r4, r5
-    jnb .recursive_done
+    jnl .recursive_done
     call .partition
     push r5
     mov r5, r6
     sub r5, 1
+    push r6
     call .recursive
+    pop r6
     pop r5
     push r4
     mov r4, r6
@@ -159,7 +161,6 @@ quicksort:
     add r8, 1
     cmp r8, r5
     jne .partition_loop
-.partition_done:
     mov r0, r6
     mov r1, r5
     call dataset.swap
