@@ -19,6 +19,7 @@ start:
     dw bubble_sort, "Bubble Sort", 0
     dw insertion_sort, "Insertion S", 0
     dw selection_sort, "Selection S", 0
+    dw ugly_hax, "Ugly Hacks", 0
     dw .shutdown, "Shutdown", 0
     dw 0
 .shutdown:
@@ -117,6 +118,40 @@ shuffle:
     dw 0
 .nothing:
     ret
+
+
+
+
+; * Ugly hacks. This algorithm exploits the fact that the values in the dataset
+;   (regardless of order) actually match their final position in the sorted
+;   dataset. This is basically radix sort. Its purpose is to remind everyone
+;   comparison sorting isn't always the answer.
+ugly_hax:
+    call dataset.import
+    mov r5, [dataset.size]
+    sub r5, 1
+.reverse_loop:
+    mov r0, [dataset+r5]
+    mov [.reverse_dataset+r0], r5
+    sub r5, 1
+    jnc .reverse_loop
+    mov r5, [dataset.size]
+    sub r5, 1
+.hacks_loop:
+    mov r0, [.reverse_dataset+r5]
+    mov r6, [dataset+r5]
+    mov r1, r5
+    call dataset.swap
+    mov [.reverse_dataset+r6], r0
+    sub r5, 1
+    jnc .hacks_loop
+    ret
+; * 36 cells for the reverse dataset imported from the demo peripheral.
+.reverse_dataset:
+    dw 0, 0, 0, 0, 0, 0, 0, 0, 0
+    dw 0, 0, 0, 0, 0, 0, 0, 0, 0
+    dw 0, 0, 0, 0, 0, 0, 0, 0, 0
+    dw 0, 0, 0, 0, 0, 0, 0, 0, 0
 
 
 
