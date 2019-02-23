@@ -22,9 +22,13 @@ end
 local named_args = {}
 local unnamed_args = {}
 for ix, arg in ipairs({...}) do
-    local key, value = arg:match("^([^=]+)=(.-)$")
-    if key then
-        named_args[key] = value
+    if not (type(arg) == "number") then
+        local key, value = arg:match("^([^=]+)=(.-)$")
+        if key then
+            named_args[key] = value
+        else
+            table.insert(unnamed_args, arg)
+        end
     else
         table.insert(unnamed_args, arg)
     end
