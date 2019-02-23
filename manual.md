@@ -1069,7 +1069,7 @@ a good idea even if you _do_ want to program the thing by hand or want to write
 your own assembler; it's pretty well commented). Once you have that, programming
 is as simple as chucking your code into a file and issuing
 
-```
+```lua
 loadfile("/path/to/r2asm.lua")("/path/to/code.asm")
 ```
 
@@ -1091,7 +1091,7 @@ Let's say you want to program the CPU whose identifier is `0xBEEF` (identifiers
 are integers and are stored in the ctype property of a FILT particle) and
 redirect the output to `r2asm.log`. You'd do this by issuing
 
-```
+```lua
 loadfile("/path/to/r2asm.lua")("/path/to/code.asm", 0xBEEF, "r2asm.log")
 ```
 
@@ -1104,7 +1104,7 @@ Fun fact: this `loadfile` magic is just plain old Lua, so you can load R2ASM
 into memory once and then use it later as many times as you want, until you exit
 TPT:
 
-```
+```lua
 r2asm = loadfile("/path/to/r2asm.lua")
 r2asm("/path/to/code/for/beef.asm", 0xBEEF, "r2asm.beef.log")
 r2asm("/path/to/code/for/dead.asm", 0xDEAD, "r2asm.dead.log")
@@ -1191,7 +1191,7 @@ an instruction:
   matches the class of the operation; `send` is in _Class 2_ and the operand
   list matches the `OPER [REG_RB-U11_I1], REG_R2` pattern in _Class 2_; this
   operand mode has the code `0x00D08000`;
-* substitute the operands into the pattern, convert them to bits and
+* substitue the operands into the pattern, convert them to bits and
   shift them to the left by the amount of bits shown next to the pattern in the
   enormous operand mode table;
     * `RB` is `r5` (`0x5`) and is shifted to the left by 16 bits, yielding
@@ -1297,7 +1297,7 @@ the breakout box built into the R2, which exposes port 0; the ctype of the FILT
 particle in that is `0x10000000` (and changing it is not recommended).
 
 As stated before, any number of breakout boxes may be connected to the
-expansion interface; in other words breakout boxes are stackable. The
+expansion interface; in other words, breakout boxes are stackable. The
 built-in breakout box and all external breakout boxes are collectively referred
 to as the _I/O bus_. Exposing the same port with multiple breakout boxes on the
 same bus leads to undefined behaviour.

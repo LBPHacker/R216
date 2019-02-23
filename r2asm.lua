@@ -20,15 +20,28 @@ local function ipairs(tbl_param)
 end
 
 local named_args = {}
-local unnamed_args = {}
-for ix, arg in ipairs({...}) do
-    local key, value = arg:match("^([^=]+)=(.-)$")
-    if key then
-        named_args[key] = value
-    else
-        table.insert(unnamed_args, arg)
+local unnamed_args = {...}
+if tpt then
+	if type(unnamed_args[#unnamed_args]) == "table" then
+		named_args = unnamed_args[#unnamed_args]
+		unnamed_args[#unnamed_args] = nil
+	end
+else
+	-- * This branch assumes that we're being run from a shell as a standalone
+	--   program through a Lua interpreter and thus all our arguments are
+	--   strings.
+    local cmdline_unnamed_args = {}
+    for ix, arg in ipairs(unnamed_args) do
+        local key, value = arg:match("^([^=]+)=(.-)$")
+        if key then
+            named_args[key] = value
+        else
+            table.insert(cmdline_unnamed_args, arg)
+        end
     end
+    unnamed_args = cmdline_unnamed_args
 end
+
 
 -- * A list of unnamed arguments:
 --   * `source_path` is, unsurprisingly enough, the path to the assembly source.
@@ -917,6 +930,10 @@ xpcall(function()
     -- * Finally we try to "flash" the machine code.
     local flash_mode
     if headless_out_bin then
+    	if not supported_models[target_model_number] then
+    		print_e("model not supported")
+    		return
+    	end
         flash_mode = "headless_bin"
     else
         flash_mode = supported_models[target_model_number].flash_mode
