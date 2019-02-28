@@ -22,14 +22,14 @@ end
 local named_args = {}
 local unnamed_args = {...}
 if tpt then
-	if type(unnamed_args[#unnamed_args]) == "table" then
-		named_args = unnamed_args[#unnamed_args]
-		unnamed_args[#unnamed_args] = nil
-	end
+    if type(unnamed_args[#unnamed_args]) == "table" then
+        named_args = unnamed_args[#unnamed_args]
+        unnamed_args[#unnamed_args] = nil
+    end
 else
-	-- * This branch assumes that we're being run from a shell as a standalone
-	--   program through a Lua interpreter and thus all our arguments are
-	--   strings.
+    -- * This branch assumes that we're being run from a shell as a standalone
+    --   program through a Lua interpreter and thus all our arguments are
+    --   strings.
     local cmdline_unnamed_args = {}
     for ix, arg in ipairs(unnamed_args) do
         local key, value = arg:match("^([^=]+)=(.-)$")
@@ -606,14 +606,14 @@ local function assemble_source()
     end
 
     -- * Try to open the headless output if required, bail out if we can't.
-    if named_args["headless_model"] then
+    if named_args.headless_model then
         -- * Default to /dev/stdout (it's not a real default of the named
         --   argument but rather a default of the file handle, so it'll work on
         --   systems where /dev/stdout doesn't exist).
         headless_out_bin = io.stdout
-        if named_args["headless_out"] then
+        if named_args.headless_out then
             local err
-            headless_out_bin, err = io.open(named_args["headless_out"], "wb")
+            headless_out_bin, err = io.open(named_args.headless_out, "wb")
             if not headless_out_bin then
                 print_e("failed to open headless output: %s", err)
                 return
@@ -898,6 +898,32 @@ local function assemble_source()
     return machine_code
 end
 
+local function machine_code_from_source()
+
+    local handle, err = io.open(source_path, "r")
+    if not handle then
+        print_e("failed to open source: %s", err)
+        return
+    end
+
+    local machine_code = {}
+    while true do
+        -- * Read opcodes from `source_path` as little-endian 4-byte values.
+        local four_bytes = handle:read(4)
+        if not four_bytes or #four_bytes ~= 4 then
+            break
+        end
+        local   value = four_bytes:byte(1)
+        value = value + four_bytes:byte(2) * 0x100
+        value = value + four_bytes:byte(3) * 0x10000
+        value = value + four_bytes:byte(4) * 0x1000000
+        table.insert(machine_code, value % 0x20000000 + 0x20000000)
+    end
+
+    handle:close()
+    return machine_code
+end
+
 -- * The xpcall magic is here because someone might run this through a script
 --   runner tool, like I do (mine runs this when I press Ctrl+Return); which may
 --   or may not handle errors correctly. Mine sort of does, but it's better to
@@ -906,11 +932,11 @@ xpcall(function()
 
     -- * First we figure out where the CPU is.
     local qrtz_anchor_id, target_model_number
-    if named_args["headless_model"] then
+    if named_args.headless_model then
         -- * `qrtz_anchor_id` is left empty as we're not even running under TPT,
         --   as apparent from the fact that the headless_model named parameter
         --   was passed.
-        target_model_number = named_args["headless_model"]
+        target_model_number = named_args.headless_model
     else
         -- * `qrtz_anchor_id` gets assigned the id of the QRTZ particle in the
         --   CPU selected, if there's any.
@@ -920,9 +946,15 @@ xpcall(function()
         end
     end
 
-    -- * Then we assemble the source into an array of ctypes.
-    -- * `machine_code` only gets assigned if the translation succeeds.
-    local machine_code = assemble_source()
+    -- * Then we get get an array of ctypes from somewhere.
+    local machine_code
+    if named_args.source_type == "binary_32le" then
+        machine_code = machine_code_from_source()
+    else
+        -- * In this case we assemble the source into an array of ctypes.
+        -- * `machine_code` only gets assigned if the translation succeeds.
+        machine_code = assemble_source()
+    end
     if not machine_code then
         return
     end
@@ -930,10 +962,10 @@ xpcall(function()
     -- * Finally we try to "flash" the machine code.
     local flash_mode
     if headless_out_bin then
-    	if not supported_models[target_model_number] then
-    		print_e("model not supported")
-    		return
-    	end
+        if not supported_models[target_model_number] then
+            print_e("model not supported")
+            return
+        end
         flash_mode = "headless_bin"
     else
         flash_mode = supported_models[target_model_number].flash_mode
@@ -947,7 +979,7 @@ xpcall(function()
         return
     end
 
-    if named_args["headless_out"] then
+    if named_args.headless_out then
         headless_out_bin:close()
     end
 
