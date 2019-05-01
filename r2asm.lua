@@ -663,7 +663,7 @@ local function assemble_source()
                     if last_global_label then
                         label_name = last_global_label .. cap
                     else
-                        print_el(line, "local label without global label")
+                        print_el(ix_line, "local label without global label")
                     end
                 else
                     -- * Handle global labels.
@@ -823,6 +823,7 @@ local function assemble_source()
                             operands = match_punctuator(operands, ",")
                             if not operands then
                                 print_el(ix_line, "expected ','")
+                                break
                             end
                         end
 

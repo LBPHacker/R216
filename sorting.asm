@@ -1,3 +1,6 @@
+; * This is the source code for the program used in
+;   https://powdertoy.co.uk/Browse/View.html?ID=2368015
+
 start:
     mov sp, 0                 ; * Initialise stack pointer.
     mov r10, 0                ; * r10 holds the address of the port
@@ -364,7 +367,7 @@ dataset:
     bump r12
 .recv_loop:
     recv r0, r12
-    jnc .recv_loop            ; * The carry bit it set if something is received.
+    jnc .recv_loop            ; * The carry bit is set if something is received.
     recv [r1+34], r12         ; * I need a better assembler.
     recv [r1+33], r12
     recv [r1+32], r12

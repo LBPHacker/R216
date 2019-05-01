@@ -1,3 +1,6 @@
+; * This is the source code for the program used in
+;   https://powdertoy.co.uk/Browse/View.html?ID=2303519
+
 ; * This program makes use of the stack pointer, so it is first initialised to 0
 ;   and is rarely (never?) written to explicitly.
 ; * The calling convention used in this program is as follows:
@@ -242,7 +245,7 @@ start:
     call clear_continuous     ;   ... then clear the previous solution...
     send r10, 0x1092
     mov r0, global_str_buf
-    call write_string         ;   ... and print both current solution.
+    call write_string         ;   ... and print both current solutions.
     send r10, 0x10A0
     mov r0, .string_xl
     call write_string         ; * State that this is the linear equation case.
@@ -283,7 +286,7 @@ start:
     call clear_continuous     ;   ... then clear the previous solution...
     send r10, 0x1092
     mov r0, global_str_buf
-    call write_string         ;   ... and print both current solution.
+    call write_string         ;   ... and print both current solutions.
     send r10, 0x10A0
     mov r0, .string_xs
     call write_string         ; * State that this is the single solution case.
@@ -612,9 +615,9 @@ float_from_string:
 .read_exp_digits:
     mov r1, [r0]
     sub r1, '0'
-    jb .read_exp_done         ; * It's not a digit, move one.
+    jb .read_exp_done         ; * It's not a digit, move on.
     cmp r1, 9                 ; * That's a '9' (we subtracted 0x30 earlier).
-    ja .read_exp_done         ; * It's not a digit, move one.
+    ja .read_exp_done         ; * It's not a digit, move on.
     add r0, 1
     mov r7, r9                ; * The same thing happens here as earlier,
     shl r7, 2                 ;   except it's 16-bit arithmetic now and it's
@@ -1226,7 +1229,7 @@ float_add:
     and r1, 0x007F            ; * Discard implicit leading one.
     or r1, r7                 ; * Merge base-2 logarithm back.
                               ; * Beware, fallthrough into common
-                              ;   epilogues.encode_and_exit.
+                              ;   float_epilogue.encode_and_exit.
 
 float_epilogue:
 .encode_and_exit:
