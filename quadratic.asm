@@ -1437,7 +1437,7 @@ float_divide:
 .division_loop:
     shl r0, 1                 ; * The usual shift-and-add loop. Shift dividend
     scl r1, 1                 ;   up, see if we can subtract the divisor,
-    mov r4, r0                ;   don't write back the different if we can't,
+    mov r4, r0                ;   don't write back the difference if we can't,
     mov r5, r1                ;   set a bit in the quotient if we can.
     sub r4, r2
     sbb r5, r3

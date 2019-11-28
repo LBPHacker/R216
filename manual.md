@@ -1146,6 +1146,22 @@ Source code [available on GitHub][701].
 [701]: https://github.com/LBPHacker/R216/blob/master/brainfuck.asm
     "Optimising Brainfuck interpreter for the R216 on GitHub"
 
+### A Forth implementation
+
+What it says on the tin. In case the conditional jumps weren't enough to
+convince you of the Turing-completeness of this machine, [siraben][703]'s Forth
+implementation definitely will. Forth is a relatively easy-to-port,
+stack-oriented language that shows up from time to time as often in the most
+unlikely of places as on mainstream computers and emulators. With this, we
+finally have the first high-level programming environment in TPT.
+
+Source code [available on GitHub][702].
+
+[702]: https://github.com/siraben/r216-forth/blob/master/forth.asm
+    "A Forth implementation for the R216K8B on GitHub"
+[703]: https://github.com/siraben
+    "siraben's profile on GitHub"
+
 
 
 
@@ -1383,4 +1399,5 @@ started with synchronisation though.
 * 07-07-2018: Initial release
 * 18-07-2018: Revision #1: typo and wording fixes
 * 26-10-2018: R216K8B added to the list of models
+* 28-11-2019: Linked siraben's Forth
 
