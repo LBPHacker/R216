@@ -324,7 +324,7 @@ enough with the width I managed to shrink the RAM to, and thus it ended up being
 In fact that's so much space that I never once had to work on getting components
 smaller. Everything just fit perfectly on the first try. And back when I started
 building this thing, I was way worse at optimising for space. The
-[The CONV tmp trick][390] hasn't been discovered yet either. Oh yeah, I forgot
+[The CONV tmp trick][390] hadn't been discovered yet either. Oh yeah, I forgot
 to mention that this computer has been finished for more than a year, except for
 a few bugs I fixed lately and other minor adjustments.
 
@@ -999,10 +999,10 @@ recv primary, secondary ; * Check for raw data.
 ```
 
 `recv` checks if the Raw Data bit is set on the virtual I/O port whose number
-matches the value in the secondary operand. If it isn't, the carry flag is set.
-If it is, the carry flag is cleared and the data visible on the port is stored
-in the primary operand. Other flags are updated according to the value read, or
-are undefined if no value is read.
+matches the value in the secondary operand. If it isn't, the carry flag is
+cleared. If it is, the carry flag is set and the data visible on the port is
+stored in the primary operand. Other flags are updated according to the value
+read, or are undefined if no value is read.
 
 The R2 may not detect the raw data being sent if it's checking the Raw Data bit
 out of phase with the peripheral on the other end of the port. [Read this][581]
