@@ -17,6 +17,7 @@
 ;           -- LBPHacker
 
 
+%include "common"
 
 
 ; * Entry point.
@@ -329,7 +330,7 @@ start:
 .string_xc:
     dw 0x200F, "X=", 0
 .string_xpm:
-    dw 0x200F, " \xB5", 0
+    dw 0x200F, " ", 0xB5, 0
 .string_xs:
     dw 0x2007, "  (double root) ", 0
 .string_xn:
@@ -589,7 +590,8 @@ float_from_string:
     add r0, 1
     jmp .parse_digits
 .parse_dot:
-    cmp r1, -2                ; * That's a '.' (we subtracted 0x30 earlier).
+    cmp r1, 0xFFFE            ; * That's a '.' (we subtracted 0x30 earlier,
+                              ;   0xFFFE = -2).
     jne .parse_exponent       ; * If it's not a even dot, move on.
     test r9, r9               ; * Check if the dot has already been read.
     jz .parse_exponent        ;   Move on if it has.
@@ -984,7 +986,7 @@ float_to_string:
     mov r4, 7                 ; * This is where the fancy printing of numbers
     mov r6, 0                 ;   happens. They are printed in scientific
     mov r7, 1                 ;   notation unless the base-10 logarithm, held in
-    cmp r5, -3                ;   r5, falls in the range [-3; 6].
+    cmp r5, 0xFFFD            ;   r5, falls in the range [-3; 6] (0xFFFD = -3).
     jl .emit_scientific       ; * When printing in scientific notation, 7 digits
     cmp r5, 6                 ;   are printed. These are numbered from the
     jg .emit_scientific       ;   right, the rightmost being the first.
@@ -1516,7 +1518,7 @@ float_sqrt:
     shl r6, 1
     scl r7, 1
 .skip_shift_up:
-    cmp r3, -0x3F80           ; * Check for underflow.
+    cmp r3, 0xC080            ; * Check for underflow (0xC080 = -0x3F80).
     jle float_epilogue.result_is_zero
     shr r3, 1                 ; * Halve the exponent. Basic square root stuff.
     test r3, 0x4000

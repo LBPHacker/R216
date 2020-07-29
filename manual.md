@@ -1,6 +1,6 @@
 % R216 Manual and Instruction Reference
 % LBPHacker
-% 26-10-2018
+% 28-11-2019
 
 # R216 Manual and Instruction Reference
 
@@ -713,6 +713,8 @@ examples of different instructions using different operand modes.
     "Notes – Instruction encoding"
 
 ```r2asm
+%include "common"
+
 start:
     mov sp, 0         ; * Zero out sp (1 frame).
     mov r7, .loop     ; * Copy the cell of .loop into r7 (1 frame).
@@ -726,7 +728,7 @@ start:
                       ;   the value at the cell pointed to by r5-88 (2 frames).
     pop [r4+r9]       ; * Pop a value into the cell pointed to by r4+r9
                       ;   (3 frames).
-    add r13, [sp]     ; * Move the value on the top of the stack to r13
+    add r13, [sp]     ; * Add the value on the top of the stack to r13
                       ;   (2 frames).
     hlt               ; * Halt and wait for a resume (1 frame).
     jmp r7            ; * Jump to whatever is stored in r7 (1 frame).
@@ -798,7 +800,7 @@ adds the carry flag to the result too; the carry flag is worth a 1 if set or a 0
 if unset. `adds` and `adcs` are the (uncommon) non-storing versions of `add` and
 `adc`, respectively.
 
-These instruction report an unsigned overflow by setting the carry flag and a
+These instructions report an unsigned overflow by setting the carry flag and a
 signed overflow by setting the overflow flag. These flags are reset otherwise.
 
 ### SUB, SBB, CMP, CMB -- subtract and compare
@@ -1039,7 +1041,7 @@ call primary ; * Call subroutine.
 `call` copies the value in its primary operand into the instruction pointer and
 [pushes][561] the address of the instruction immediately following the `call`
 itself onto the stack. A later `ret` may pop the value pushed by `call`,
-handling execution back to the code after the `call`. In this case, the `call`
+handing execution back to the code after the `call`. In this case, the `call`
 is considered a subroutine call. Of course it can be used for all sorts of weird
 stuff too, if you're into that.
 
@@ -1064,22 +1066,38 @@ any, don't give up yet, I still may write a C compiler in Lua for this thing.
 You bet I'm crazy enough to do that.
 
 Unless you want to program the thing by hand or write your own assembler, the
-first step is to grab [the assembler I made, R2ASM][400] (in fact this might be
+first step is to grab [the assembler I made, TPTASM][400] (in fact this might be
 a good idea even if you _do_ want to program the thing by hand or want to write
 your own assembler; it's pretty well commented). Once you have that, programming
 is as simple as chucking your code into a file and issuing
 
 ```lua
-loadfile("/path/to/r2asm.lua")("/path/to/code.asm")
+loadfile("/path/to/tptasm/main.lua")("/path/to/code.asm")
 ```
 
 in the TPT console (which will get the job done, but it'll be difficult to read
 the error and warning messages; read on for a solution).
 
-[400]: https://github.com/LBPHacker/R216/blob/master/r2asm.lua
-    "Assembler the R216 on GitHub"
+[400]: https://github.com/LBPHacker/tptasm
+    "TPTASM on GitHub"
 
-R2ASM takes three parameters, the first of which is the path to the source to be
+You may have seen this:
+
+```r2asm
+%include "common"
+
+...
+```
+
+i.e., the built-in TPTASM header `common` being `%include`d by some of the
+examples in this document. This is necessary because TPTASM does a few very
+common things, such as implement `dw` or alias `jb` to `jc`, via macros, which
+are only available through this header. Using these macros isn't mandatory,
+because who am I to tell you what macros to use, right? So the inclusion must
+be made optional. That said, using these macros instead of your own is highly
+recommended.
+
+TPTASM takes three parameters, the first of which is the path to the source to be
 assembled and is mandatory. The second is the (supposedly) unique ID of the CPU
 you're trying to program. This is useful if you have more CPUs in the
 simulation. The third is the path to a log file to redirect the output of the
@@ -1089,10 +1107,10 @@ in any old text editor.
 
 Let's say you want to program the CPU whose identifier is `0xBEEF` (identifiers
 are integers and are stored in the ctype property of a FILT particle) and
-redirect the output to `r2asm.log`. You'd do this by issuing
+redirect the output to `tptasm.log`. You'd do this by issuing
 
 ```lua
-loadfile("/path/to/r2asm.lua")("/path/to/code.asm", 0xBEEF, "r2asm.log")
+loadfile("/path/to/tptasm/main.lua")("/path/to/code.asm", 0xBEEF, "tptasm.log")
 ```
 
 If you're wondering how one sets the unique identifier of a CPU, it's as simple
@@ -1100,14 +1118,14 @@ as changing the ctype of the FILT on the left of the one and only QRTZ particle
 in the whole contraption (you can find this with Ctrl+F in-game). The stock
 model ships with the identifier `0xDEAD`.
 
-Fun fact: this `loadfile` magic is just plain old Lua, so you can load R2ASM
+Fun fact: this `loadfile` magic is just plain old Lua, so you can load TPTASM
 into memory once and then use it later as many times as you want, until you exit
 TPT:
 
 ```lua
-r2asm = loadfile("/path/to/r2asm.lua")
-r2asm("/path/to/code/for/beef.asm", 0xBEEF, "r2asm.beef.log")
-r2asm("/path/to/code/for/dead.asm", 0xDEAD, "r2asm.dead.log")
+tptasm = loadfile("/path/to/tptasm/main.lua")
+tptasm("/path/to/code/for/beef.asm", 0xBEEF, "tptasm.beef.log")
+tptasm("/path/to/code/for/dead.asm", 0xDEAD, "tptasm.dead.log")
 ```
 
 
@@ -1222,6 +1240,8 @@ an instruction:
 Here's some more example material.
 
 ```r2asm
+%include "common"
+
 start:
     mov sp, 0         ; * 0x2020000E
     mov r7, .loop     ; * 0x20200037 (assuming .loop = 3)
@@ -1334,7 +1354,7 @@ explicitly when data is received.
 ### Asynchronous I/O protocol
 
 The fact that the R2 doesn't block when checking for attention requests or
-raw data on a port might by scary at first, but everything can be done with
+raw data on a port might be scary at first, but everything can be done with
 non-blocking instructions too. In fact, the thing that should give you the most
 trouble is synchronising up the computer and the peripheral (which may be
 another computer). This section won't tell you how to solve every problem

@@ -7,9 +7,13 @@
 ; * Sequences of +, -, > and < are collapsed into single commands on the fly
 ;   after the interpreter sees them at least once.
 
+
+%include "common"
+
+
 bootstrap:
-    mov sp, 0                 ; * Zero put sp.
-    mov r10, 0                ; * terminal should be connected to port 0.
+    mov sp, 0                 ; * Zero out sp.
+    mov r10, 0                ; * Terminal should be connected to port 0.
     bump r10                  ; * Reset terminal.
     mov r12, 0x1000           ; * Set cursor position to 0;0.
     send r10, r12
@@ -38,7 +42,7 @@ main:
     jb .br_sub_getchar_add    ; * Anything below a '.' must be a one of '+,-'.
     cmp r0, '>'               ; * Anything above must be one of '<>[]'.
     je .op_right              ; * Branch off to op_right if r0 is a '>'.
-    jb .op_left               ; * Anything below must be a '<' so, so branch
+    jb .op_left               ; * Anything below must be a '<', so branch
     cmp r0, '['               ;   off to op_left.
     je .op_push               ; * Anything above must be one of '[]'. If it's a
 .op_pop:                      ;   '[', branch off to op_push, otherwise

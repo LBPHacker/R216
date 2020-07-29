@@ -1,3 +1,5 @@
+; * WORK IN PROGRESS, PLEASE IGNORE.
+
 ; * This is the source code for the program used in
 ;   https://powdertoy.co.uk/Browse/View.html?ID=???????
 

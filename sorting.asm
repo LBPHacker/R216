@@ -1,6 +1,10 @@
 ; * This is the source code for the program used in
 ;   https://powdertoy.co.uk/Browse/View.html?ID=2368015
 
+
+%include "common"
+
+
 start:
     mov sp, 0                 ; * Initialise stack pointer.
     mov r10, 0                ; * r10 holds the address of the port
