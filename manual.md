@@ -1,6 +1,6 @@
 % R216 Manual and Instruction Reference
 % LBPHacker
-% 28-11-2019
+% 04-10-2020
 
 # R216 Manual and Instruction Reference
 
@@ -1411,6 +1411,114 @@ That's it. If that doesn't clear everything up, bump me and I'll try to extend
 this section to cover more ground. I think it should be about enough to get you
 started with synchronisation though.
 
+### The terminal
+
+The terminal peripheral present in the [R2 showcase save][896], the RT2, has a
+simple protocol that has long eluded documentation, due to how little required
+it seemed. This section is dedicated to this protocol.
+
+The terminal only supports 16-colour text mode, which essentially means plotting
+characters onto the cells of a grid. The size of the grid is 16×12 in the
+RT2812A model, which is currently also the only existing model. Plotting in this
+case refers to drawing a 6×6 sprite with a depth of a single bit, which
+translates to a choice between two colours, the foreground colour and the
+background colour.
+
+Plotting is achieved by sending the terminal a character to plot. The colours
+used for plotting are 4-bit [CGA colours][901] and are stored in an internal
+8-bit colour register.
+
+[901]: https://en.wikipedia.org/wiki/Color_Graphics_Adapter#Color_palette
+	"CGA colour palette"
+
+The terminal also has an internal 10-bit cursor register, the four least
+significant bits of which determine which column a character is plotted in,
+and the rest of the bits of which determine which row. Invalid column-row
+combinations result in no character being plotted. Regardless, this register
+is incremented every time an attempt is made to plot a character.
+
+Commands are sent to the terminal as raw data using [`send`][567]. It
+differentiates between three kinds of commands:
+
+ - `0x00??`, which plots the character corresponding to `??`;
+ - `0x1???`, which sets the internal cursor register to `???` (the two most
+   significant bits are discarded);
+ - `0x20??`, which sets the internal colour register to `??` (high nibble
+   selects background colour, low nibble selects foreground colour).
+
+The 25 bits that encode the top-left 5×5 pixels of the 6×6 sprite are taken from
+a 256-character ROM; a set bit represents the foreground colour, an unset one
+the background colour. The rest of the 6×6 sprite is hardcoded to use the
+background colour. Below is the mapping of bits to sprite pixels, with the
+crosses representing the hardcoded region, and an example of the sprite for `2`,
+which is stored as `0x212AE640` in the ROM (bit 29 is the keep-alive bit).
+
+```
++--+--+--+--+--+--+   +--+--+--+--+--+--+
+| 0| 5|10|15|20| ×|   |  |  |▉▉|▉▉|  |  |
+| 1| 6|11|16|21| ×|   |  |▉▉|  |  |▉▉|  |
+| 2| 7|12|17|22| ×|   |  |  |  |▉▉|  |  |
+| 3| 8|13|18|23| ×|   |  |  |▉▉|  |  |  |
+| 4| 9|14|19|24| ×|   |  |▉▉|▉▉|▉▉|▉▉|  |
+| ×| ×| ×| ×| ×| ×|   |  |  |  |  |  |  |
++--+--+--+--+--+--+   +--+--+--+--+--+--+
+```
+
+The character set encoded in the ROM of the RT2812A model is as follows:
+
+```
+       ?0    ?1    ?2    ?3    ?4    ?5    ?6    ?7    ?8    ?9    ?A    ?B    ?C    ?D    ?E    ?F  
+    ------|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|
+   |                                                                                                 
+0? |                                                                                                 
+   _                                                                                                 
+   |                                                                                                 
+1? |                                                                                                 
+   _                                                                                                 
+   |         ▉    ▉ ▉  ▄▉▄▉▄ ▄▀▉▀▀ ▀  ▄▀ ▉▀▀▄    ▉    ▄▀▀   ▀▀▄   ▀▄▀    ▄                        ▄▀ 
+2? |         ▀         ▄▉▄▉▄ ▀▀▉▀▉  ▄▀   ▄▀ ▉▀        ▉       ▉   ▀ ▀   ▀▉▀    ▄    ▀▀▀         ▄▀   
+   _         ▀          ▀ ▀  ▀▀▀▀  ▀   ▀  ▀▀▀▀         ▀▀   ▀▀                ▀            ▀   ▀     
+   | ▄▀▀▉▄   ▄▉   ▄▀▀▄  ▀▀▀▄    ▄▉  ▉▀▀▀  ▄▀▀▀  ▀▀▀▉  ▄▀▀▉  ▉▀▀▄   ▄     ▄     ▄▀   ▄▄▄   ▀▄    ▀▀▉  
+3? | ▉▄▀ ▉    ▉    ▄▀    ▀▀▄  ▄▉▄▉  ▀▀▀▄  ▉▀▀▉    ▉   ▄▀▀▄  ▀▀▀▉         ▄    ▀▄    ▄▄▄    ▄▀    ▀▀  
+   _  ▀▀▀    ▀▀▀  ▀▀▀▀  ▀▀▀      ▀  ▀▀▀    ▀▀▀    ▀   ▀▀▀   ▀▀▀    ▀    ▀       ▀         ▀      ▀   
+   | ▄▀▉▉▄ ▄▀▀▀▄ ▉▀▀▀▄ ▄▀▀▀▀ ▉▀▀▀▄ ▉▀▀▀▀ ▉▀▀▀▀ ▄▀▀▀▀ ▉   ▉  ▀▉▀     ▀▉ ▉  ▄▀ ▉     ▉▄ ▄▉ ▉▄  ▉ ▄▀▀▀▄ 
+4? | ▉ ▀▀▀ ▉▀▀▀▉ ▉▀▀▀▄ ▉     ▉   ▉ ▉▀▀▀  ▉▀▀▀  ▉ ▀▀▉ ▉▀▀▀▉   ▉   ▄   ▉ ▉▀▀▄  ▉     ▉ ▀ ▉ ▉ ▀▄▉ ▉   ▉ 
+   _  ▀▀▀  ▀   ▀ ▀▀▀▀   ▀▀▀▀ ▀▀▀▀  ▀▀▀▀▀ ▀      ▀▀▀▀ ▀   ▀  ▀▀▀   ▀▀▀  ▀   ▀ ▀▀▀▀▀ ▀   ▀ ▀   ▀  ▀▀▀  
+   | ▉▀▀▀▄ ▄▀▀▀▄ ▉▀▀▀▄ ▄▀▀▀▀ ▀▀▉▀▀ ▉   ▉ ▉   ▉ ▉   ▉ ▀▄ ▄▀ ▉   ▉ ▉▀▀▉▀  ▉▀▀  ▀▄     ▀▀▉   ▄▀▄        
+5? | ▉▀▀▀  ▉ ▄ ▉ ▉▀▀▀▄ ▀▀▀▀▉   ▉   ▉   ▉  ▉ ▉  ▉ ▉ ▉  ▄▀▄   ▀▄▀   ▄▀ ▄  ▉      ▀▄     ▉  ▀   ▀       
+   _ ▀      ▀▀▀  ▀   ▀ ▀▀▀▀    ▀    ▀▀▀    ▀    ▀ ▀  ▀   ▀   ▀   ▀▀▀▀▀  ▀▀▀      ▀  ▀▀▀        ▀▀▀▀▀ 
+   |   ▀▄    ▄▄   ▉▄▄    ▄▄▄   ▄▄▉   ▄▄    ▄▄    ▄▄▄  ▉▄▄    ▀       ▀  ▉ ▄   ▀▉   ▄▄▄▄   ▄▄▄    ▄▄  
+6? |        ▄▄▄▉  ▉  ▉  ▉     ▉  ▉  ▉▀▀▀  ▉▄    ▀▀▀▉  ▉  ▉   ▉    ▄  ▉  ▉▀▄    ▉   ▉ ▉ ▉  ▉  ▉  ▉  ▉ 
+   _         ▀▀▀  ▀▀▀    ▀▀▀   ▀▀▀   ▀▀   ▀      ▀▀   ▀  ▀   ▀     ▀▀   ▀  ▀  ▀▀▀  ▀ ▀ ▀  ▀  ▀   ▀▀  
+   |  ▄▄▄    ▄▄▄  ▄ ▄▄   ▄▄▄  ▉▄▄   ▄  ▄  ▄  ▄ ▄   ▄  ▄  ▄  ▄  ▄  ▄▄▄▄   ▉▀    ▉    ▀▉   ▄▀▉▄▀ ▉▉▉▉▉ 
+7? |  ▉▄▄▀  ▀▄▄▉  ▉▀    ▀▀▄▄  ▉     ▉  ▉  ▉ ▄▀ ▉ ▉ ▉  ▄▀▄▀   ▀▀▉   ▄▀   ▀▄     ▄     ▄▀        ▉▉▉▉▉ 
+   _  ▀        ▀  ▀     ▀▀▀    ▀▀▀   ▀▀    ▀    ▀ ▀   ▀  ▀    ▀   ▀▀▀▀   ▀▀    ▀    ▀▀         ▀▀▀▀▀ 
+   |  ▄▉▄   ▄▄▄    ▄         ▉▉▉▉▉  ▄▉▄   ▄▄▄    ▄    ▉ ▉  ▄▄▄▄▄ ▀▉▀▉▀ ▀▉▀▉▀ ▄▄▄▄▉  ▉ ▉  ▉▄▄▄▄ ▉▉▄▉▉ 
+8? | ▀▉▉▉▀  ▉▉▉   ▀▉▀    ▀   ▉▉▄▉▉ ▀▉▄▉▀  ▉▄▉   ▀▄▀   ▉▀▉  ▄▄▉▄▄  ▉ ▉   ▉ ▉  ▄▄▄▄▉  ▉ ▉  ▉▄▄▄▄ ▄▉▄▉▄ 
+   _   ▀                     ▀▀▀▀▀   ▀                ▀ ▀         ▀ ▀  ▀▀  ▀     ▀ ▀▀▀▀▀ ▀     ▀▀ ▀▀ 
+   | ▄▄▄▄▄  ▉ ▉  ▄▄▄    ▉ ▉    ▄▄▄       ▄▉ ▉   ▉ ▉▄ ▄▄▄▄   ▄▄▄▄ ▄▉ ▉▄  ▉ ▉▄ ▄▄▄▄▄ ▄▉ ▉  ▄▉ ▉▄ ▀▄▀▄▀ 
+9? | ▄▄▄▄▄  ▉ ▉  ▄▄▉    ▀▀▀    ▉▄▄  ▉▀▉  ▄▄▄▉   ▉▄▄▄ ▄▄ ▉   ▉ ▄▄ ▄▄▄▄▄  ▉ ▄▄ ▄▄ ▄▄ ▄▄ ▉  ▄▄ ▄▄ ▀▄▀▄▀ 
+   _        ▀ ▀                     ▀ ▀               ▀ ▀   ▀ ▀         ▀ ▀   ▀ ▀   ▀ ▀   ▀ ▀  ▀ ▀ ▀ 
+   | ▀▉▀▄▉ ▀▀▀▀▀   ▀   ▉▀▀▀▀ ▀▀▀▀▉  ▄ ▄                    ▄▄▄▄▄ ▉     ▉▉    ▉▉▉   ▉▉▉▉   ▄▀▄    ▉   
+A? | ▉▄▀▄▀       ▀▀▀▀▀ ▉▀▀▀▀ ▀▀▀▀▉ ▀▄▀▄▀       ▄▄▄▄▄ ▉▉▉▉▉ ▉▉▉▉▉ ▉     ▉▉    ▉▉▉   ▉▉▉▉   ▄▀▄   ▄▉▄  
+   _ ▀ ▀▀▀         ▀   ▀▀▀▀▀ ▀▀▀▀▀       ▀▀▀▀▀ ▀▀▀▀▀ ▀▀▀▀▀ ▀▀▀▀▀ ▀     ▀▀    ▀▀▀   ▀▀▀▀   ▀ ▀    ▀   
+   |  ▄▉▄    ▀   ▀         ▀  ▄▀▄   ▄▉▄   ▀▀▀    ▉▀▀  ▀▉▀▀             ▀ ▀ ▀        ▄▄▄  ▄▄▄▉▄  ▄▉▄  
+B? |  ▄▉▄    ▀   ▀         ▀ ▄▀ ▀▄   ▀    ▄▉▄  ▀▄▉     ▄▀  ▀ ▀ ▀             ▀▀▀▀▉ ▀▄▉▄▀ ▄▄▉▄▄ ▄▉▉▉▄ 
+   _   ▀     ▀   ▀         ▀ ▀▀▀▀▀  ▀▀▀    ▀     ▀    ▀▀▀▀       ▀ ▀ ▀                    ▀    ▀▀▀▀▀ 
+   | ▉▉▉▉▉  ▄▄▉▉ ▉▉▄▄   ▉ ▉   ▉ ▉   ▉ ▉   ▉ ▉   ▉ ▉   ▉ ▉   ▉ ▉   ▉▉▉  ▄▄▄▄▄ ▄▉▉▉   ▉▉▉▄ ▄▄▄▄   ▄▄▄▄ 
+C? |  ▉▉▉  ▀▉▉▉▉ ▉▉▉▉▀ ▄   ▄  ▄▄▄  ▄▄▄▄▄ ▄ ▄ ▄ ▄▄▄▄▄  ▄▄▄   ▄ ▄   ▉▉▉  ▉▉▉▉▉ ▉▉▉▉   ▉▉▉▉ ▉▉▉▉   ▉▉▉▉ 
+   _   ▀      ▀▀ ▀▀     ▀▀▀  ▀   ▀        ▀ ▀   ▀▀▀  ▀▀▀▀▀ ▀ ▀ ▀  ▀▀▀                     ▀▀▀   ▀▀▀  
+   | ▄▉▉▉▄  ▉▉▉▄ ▄▄▄▄▄ ▄▉▉▉  ▄▉▉▉▄ ▄  ▄   ▄  ▄  ▄▀▄   ▀▄▀          ▉           ▉                 ▉   
+D? | ▉▉▉▉▉  ▉▉▉▉ ▉▉▉▉▉ ▉▉▉▉  ▉▉▉▉▉ ▄▀ ▄▀ ▀▄ ▀▄   ▄    ▄ ▄  ▀▀▀▀▀   ▉   ▀▀▀     ▀     ▀▀▀   ▉   ▀▀▀   
+   _        ▀▀▀   ▀▀▀   ▀▀▀   ▀▀▀               ▀ ▀    ▀           ▀                       ▀         
+   |   ▉                 ▉     ▉           ▉     ▉     ▉    ▄▉▄    ▉▄   ▄▉   ▀▄  ▄ ▉▉▉▀   ▀▉▉▉ ▄  ▄▀ 
+E? |   ▀▀▀ ▀▀▉     ▉▀▀ ▀▀▀▀▀   ▉▀▀ ▀▀▉▀▀ ▀▀▉   ▀▀▉▀▀ ▀▉▉▉▀ ▀▀▉▀▀ ▀▀▉▉▀ ▀▉▉▀▀   ▉▉▉ ▉▀▀▄   ▄▀▀▉ ▉▉▉   
+   _         ▀     ▀           ▀     ▀     ▀     ▀     ▀     ▀     ▀     ▀    ▀▀▀▀     ▀ ▀     ▀▀▀▀  
+   |  ▄ ▄   ▄▄▄  ▄▉▄▉▄  ▄▉▄  ▄▉▀▉▄ ▄▉▉▉▄ ▄▉▀▉▄  ▉ ▉   ▀ ▀  ▄▀▉▄▀                                     
+F? |  ▄▀▄  ▀▉▉▉▀ ▀▉▉▉▀ ▀▉▉▉▀ ▀▀▄▀▀ ▀▀▉▀▀ ▉▄ ▄▉  ▀ ▀   ▉ ▉   ▄▄ ▄                                     
+   _               ▀     ▀    ▀▀▀   ▀▀▀   ▀▀▀   ▀ ▀   ▀ ▀  ▀ ▀▀                                      
+```
+
 
 
 
@@ -1420,4 +1528,5 @@ started with synchronisation though.
 * 18-07-2018: Revision #1: typo and wording fixes
 * 26-10-2018: R216K8B added to the list of models
 * 28-11-2019: Linked siraben's Forth
+* 04-10-2020: Document RT2812A protocol
 
