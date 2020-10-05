@@ -1417,12 +1417,22 @@ The terminal peripheral present in the [R2 showcase save][896], the RT2, has a
 simple protocol that has long eluded documentation, due to how little required
 it seemed. This section is dedicated to this protocol.
 
-The terminal only supports 16-colour text mode, which essentially means plotting
-characters onto the cells of a grid. The size of the grid is 16×12 in the
-RT2812A model, which is currently also the only existing model. Plotting in this
-case refers to drawing a 6×6 sprite with a depth of a single bit, which
-translates to a choice between two colours, the foreground colour and the
-background colour.
+The screen part of the terminal only supports 16-colour text mode, which
+essentially means plotting characters onto the cells of a grid. The size of
+the grid is 16×12 in the RT2812A model, which is currently also the only
+existing model. Plotting in this case refers to drawing a 6×6 sprite with a
+depth of a single bit, which translates to a choice between two colours,
+the foreground colour and the background colour.
+
+The keyboard part of the terminal is just a peripheral that, once a key is
+pressed, sends attention requests until it gets one back, at which point it
+eventually sends the character code corresponding to the key [twice][581]. Until
+this happens, it doesn't accept more input (its buffer can only hold one key). A
+common pattern is clearing this buffer by sending the keyboard an attention
+request before starting an input routine.
+
+The screen and keyboard parts of the terminal may be used independently of each
+other.
 
 Plotting is achieved by sending the terminal a character to plot. The colours
 used for plotting are 4-bit [CGA colours][901] and are stored in an internal
