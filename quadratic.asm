@@ -254,14 +254,22 @@ start:
     add sp, 2                 ; * Pop everything, stack is ($).
     jmp .demo_wrapup          ; * Then branch off.
 .demo_emit_constant:
-    call .bump_progress_bar   ; * Reminder: stack is ($, A).
+    call .bump_progress_bar
+    mov r4, r1                ; * Prepare to state that this is the no solution
+    and r4, 0x7FFF            ;   case, but then check if C is 0, ...
+    or r4, r0
+    jz .demo_emit_zeroes      ;   ... and make it the all-zeroes case
+    mov r0, .string_xn        ;   only if it is.
+    jmp .demo_emit_zeroes_or_none
+.demo_emit_zeroes:
+    mov r0, .string_xz
+.demo_emit_zeroes_or_none:
     send r10, 0x1090
-    mov r0, .string_xn
     call write_string         ; * State that this is the no solution case.
     send r10, 0x10A0
     mov r0, 16
     call clear_continuous     ; * Clear the previous solution.
-    call .bump_progress_bar
+    call .bump_progress_bar   ; * Reminder: stack is ($, A).
     add sp, 2                 ; * Pop everything, stack is ($).
     jmp .demo_wrapup          ; * Then branch off.
 .demo_emit_single:
@@ -335,6 +343,8 @@ start:
     dw 0x2007, "  (double root) ", 0
 .string_xn:
     dw 0x2007, "  (no solution) ", 0
+.string_xz:
+    dw 0x2007, "  (zeroes case) ", 0
 .string_xl:
     dw 0x2007, "  (linear case) ", 0
 .working_string:
