@@ -549,75 +549,75 @@ In these cases, the condition is the exact opposite of the same condition
 without the _not_.
 
 Classifying operations by how they take operands yields four different classes,
-called _Class 0_, _Class 1_, _Class 1*_ and _Class 2_. Operations in different
-classes are able to handle different operand modes. The number in the class
-reflects the number of operands the operations in that class take.
+_no-operand_ (0), _primary-only_ (P), _secondary-only_ (S), and
+_primary-and-secondary_ (PS). Operations in different classes are able to handle
+different operand modes.
 
-| Mnemonic | Class | Short description | Updates flags | Execution time | Code |
-| -------- | ----- | ----------------- | ------------- | -------------- | ---- |
-| [`adc`][520]  | 2  | add with carry               | yes | 1 |   `0x25000000` |
-| [`adcs`][520] | 2  | non-storing add with carry   | yes | 1 |   `0x2D000000` |
-| [`add`][520]  | 2  | add                          | yes | 1 |   `0x24000000` |
-| [`adds`][520] | 2  | non-storing add              | yes | 1 |   `0x2C000000` |
-| [`and`][524]  | 2  | bitwise AND                  | yes | 1 |   `0x21000000` |
-| [`ands`][524] | 2  | non-storing bitwise AND      | yes | 1 |   `0x29000000` |
-| [`bump`][525] | 1  | send attention request       |  no | 1 |   `0x38000000` |
-| [`call`][526] | 1* | call subroutine              |  no | 2 |   `0x3E000000` |
-| [`cmb`][527]  | 2  | compare with borrow          | yes | 1 |   `0x2F000000` |
-| [`cmp`][527]  | 2  | compare                      | yes | 1 |   `0x2E000000` |
-| [`hlt`][529]  | 0  | halt execution               |  no | 1 |   `0x30000000` |
-| [`ja`][530]   | 1* | jump if above                |  no | 1 |   `0x3100000F` |
-| [`jae`][530]  | 1* | jump if above or equal       |  no | 1 |   `0x31000003` |
-| [`jb`][530]   | 1* | jump if below                |  no | 1 |   `0x31000002` |
-| [`jbe`][530]  | 1* | jump if below or equal       |  no | 1 |   `0x3100000E` |
-| [`jc`][530]   | 1* | jump if carry set            |  no | 1 |   `0x31000002` |
-| [`je`][530]   | 1* | jump if equal                |  no | 1 |   `0x31000008` |
-| [`jg`][530]   | 1* | jump if greater              |  no | 1 |   `0x3100000B` |
-| [`jge`][530]  | 1* | jump if greater or equal     |  no | 1 |   `0x3100000D` |
-| [`jl`][530]   | 1* | jump if lower                |  no | 1 |   `0x3100000C` |
-| [`jle`][530]  | 1* | jump if lower or equal       |  no | 1 |   `0x3100000A` |
-| [`jmp`][530]  | 1* | jump unconditionally         |  no | 1 |   `0x31000000` |
-| [`jn`][530]   | 1* | jump never                   |  no | 1 |   `0x31000001` |
-| [`jna`][530]  | 1* | jump if not above            |  no | 1 |   `0x3100000E` |
-| [`jnae`][530] | 1* | jump if not above or equal   |  no | 1 |   `0x31000002` |
-| [`jnb`][530]  | 1* | jump if not below            |  no | 1 |   `0x31000003` |
-| [`jnbe`][530] | 1* | jump if not below or equal   |  no | 1 |   `0x3100000F` |
-| [`jnc`][530]  | 1* | jump if carry unset          |  no | 1 |   `0x31000003` |
-| [`jne`][530]  | 1* | jump if not equal            |  no | 1 |   `0x31000009` |
-| [`jng`][530]  | 1* | jump if not greater          |  no | 1 |   `0x3100000A` |
-| [`jnge`][530] | 1* | jump if not greater or equal |  no | 1 |   `0x3100000C` |
-| [`jnl`][530]  | 1* | jump if not lower            |  no | 1 |   `0x3100000D` |
-| [`jnle`][530] | 1* | jump if not lower or equal   |  no | 1 |   `0x3100000B` |
-| [`jno`][530]  | 1* | jump if overflow unset       |  no | 1 |   `0x31000005` |
-| [`jns`][530]  | 1* | jump if sign unset           |  no | 1 |   `0x31000007` |
-| [`jnz`][530]  | 1* | jump if not zero             |  no | 1 |   `0x31000009` |
-| [`jo`][530]   | 1* | jump if overflow set         |  no | 1 |   `0x31000004` |
-| [`js`][530]   | 1* | jump if sign set             |  no | 1 |   `0x31000006` |
-| [`jz`][530]   | 1* | jump if zero                 |  no | 1 |   `0x31000008` |
-| [`mov`][557]  | 2  | copy value                   | yes | 1 |   `0x20000000` |
-| [`nop`][559]  | 0  | do nothing                   |  no | 1 |   `0x31000001` |
-| [`or`][558]   | 2  | bitwise OR                   | yes | 1 |   `0x22000000` |
-| [`ors`][558]  | 2  | non-storing bitwise OR       | yes | 1 |   `0x2A000000` |
-| [`pop`][560]  | 1  | pop from stack               | yes | 2 |   `0x3D000000` |
-| [`push`][561] | 1* | push to stack                | yes | 2 |   `0x3C000000` |
-| [`recv`][562] | 2  | check for raw data           | yes | 1 |   `0x3B000000` |
-| [`ret`][563]  | 0  | return from subroutine       |  no | 2 |   `0x3F000000` |
-| [`rol`][564]  | 2  | rotate left                  | yes | 1 |   `0x32000000` |
-| [`ror`][564]  | 2  | rotate right                 | yes | 1 |   `0x33000000` |
-| [`sbb`][527]  | 2  | subtract with borrow         | yes | 1 |   `0x27000000` |
-| [`sbbs`][527] | 2  | compare with borrow          | yes | 1 |   `0x2F000000` |
-| [`send`][567] | 2  | send raw data                |  no | 1 |   `0x3A000000` |
-| [`shl`][568]  | 2  | shift left                   | yes | 1 |   `0x34000000` |
-| [`scl`][568]  | 2  | chained shift left           | yes | 1 |   `0x36000000` |
-| [`shr`][568]  | 2  | shift right                  | yes | 1 |   `0x35000000` |
-| [`scr`][568]  | 2  | chained shift right          | yes | 1 |   `0x37000000` |
-| [`sub`][527]  | 2  | subtract                     | yes | 1 |   `0x26000000` |
-| [`subs`][527] | 2  | compare                      | yes | 1 |   `0x2E000000` |
-| [`swm`][573]  | 1* | set write mask               | yes | 1 |   `0x28000000` |
-| [`test`][524] | 2  | non-storing bitwise AND      | yes | 1 |   `0x29000000` |
-| [`wait`][575] | 1  | check for attention request  | yes | 1 |   `0x39000000` |
-| [`xor`][576]  | 2  | bitwise XOR                  | yes | 1 |   `0x23000000` |
-| [`xors`][576] | 2  | non-storing bitwise XOR      | yes | 1 |   `0x2B000000` |
+| Mnemonic      | Class | Short description            | Updates flags | Execution time | Code         |
+| ------------- | ----- | ---------------------------- | ------------- | -------------- | ------------ |
+| [`adc`][520]  | PS    | add with carry               | yes           | 1              | `0x25000000` |
+| [`adcs`][520] | PS    | non-storing add with carry   | yes           | 1              | `0x2D000000` |
+| [`add`][520]  | PS    | add                          | yes           | 1              | `0x24000000` |
+| [`adds`][520] | PS    | non-storing add              | yes           | 1              | `0x2C000000` |
+| [`and`][524]  | PS    | bitwise AND                  | yes           | 1              | `0x21000000` |
+| [`ands`][524] | PS    | non-storing bitwise AND      | yes           | 1              | `0x29000000` |
+| [`bump`][525] | P     | send attention request       |  no           | 1              | `0x38000000` |
+| [`call`][526] | S     | call subroutine              |  no           | 2              | `0x3E000000` |
+| [`cmb`][527]  | PS    | compare with borrow          | yes           | 1              | `0x2F000000` |
+| [`cmp`][527]  | PS    | compare                      | yes           | 1              | `0x2E000000` |
+| [`hlt`][529]  | 0     | halt execution               |  no           | 1              | `0x30000000` |
+| [`ja`][530]   | S     | jump if above                |  no           | 1              | `0x3100000F` |
+| [`jae`][530]  | S     | jump if above or equal       |  no           | 1              | `0x31000003` |
+| [`jb`][530]   | S     | jump if below                |  no           | 1              | `0x31000002` |
+| [`jbe`][530]  | S     | jump if below or equal       |  no           | 1              | `0x3100000E` |
+| [`jc`][530]   | S     | jump if carry set            |  no           | 1              | `0x31000002` |
+| [`je`][530]   | S     | jump if equal                |  no           | 1              | `0x31000008` |
+| [`jg`][530]   | S     | jump if greater              |  no           | 1              | `0x3100000B` |
+| [`jge`][530]  | S     | jump if greater or equal     |  no           | 1              | `0x3100000D` |
+| [`jl`][530]   | S     | jump if lower                |  no           | 1              | `0x3100000C` |
+| [`jle`][530]  | S     | jump if lower or equal       |  no           | 1              | `0x3100000A` |
+| [`jmp`][530]  | S     | jump unconditionally         |  no           | 1              | `0x31000000` |
+| [`jn`][530]   | S     | jump never                   |  no           | 1              | `0x31000001` |
+| [`jna`][530]  | S     | jump if not above            |  no           | 1              | `0x3100000E` |
+| [`jnae`][530] | S     | jump if not above or equal   |  no           | 1              | `0x31000002` |
+| [`jnb`][530]  | S     | jump if not below            |  no           | 1              | `0x31000003` |
+| [`jnbe`][530] | S     | jump if not below or equal   |  no           | 1              | `0x3100000F` |
+| [`jnc`][530]  | S     | jump if carry unset          |  no           | 1              | `0x31000003` |
+| [`jne`][530]  | S     | jump if not equal            |  no           | 1              | `0x31000009` |
+| [`jng`][530]  | S     | jump if not greater          |  no           | 1              | `0x3100000A` |
+| [`jnge`][530] | S     | jump if not greater or equal |  no           | 1              | `0x3100000C` |
+| [`jnl`][530]  | S     | jump if not lower            |  no           | 1              | `0x3100000D` |
+| [`jnle`][530] | S     | jump if not lower or equal   |  no           | 1              | `0x3100000B` |
+| [`jno`][530]  | S     | jump if overflow unset       |  no           | 1              | `0x31000005` |
+| [`jns`][530]  | S     | jump if sign unset           |  no           | 1              | `0x31000007` |
+| [`jnz`][530]  | S     | jump if not zero             |  no           | 1              | `0x31000009` |
+| [`jo`][530]   | S     | jump if overflow set         |  no           | 1              | `0x31000004` |
+| [`js`][530]   | S     | jump if sign set             |  no           | 1              | `0x31000006` |
+| [`jz`][530]   | S     | jump if zero                 |  no           | 1              | `0x31000008` |
+| [`mov`][557]  | PS    | copy value                   | yes           | 1              | `0x20000000` |
+| [`nop`][559]  | 0     | do nothing                   |  no           | 1              | `0x31000001` |
+| [`or`][558]   | PS    | bitwise OR                   | yes           | 1              | `0x22000000` |
+| [`ors`][558]  | PS    | non-storing bitwise OR       | yes           | 1              | `0x2A000000` |
+| [`pop`][560]  | P     | pop from stack               | yes           | 2              | `0x3D000000` |
+| [`push`][561] | S     | push to stack                | yes           | 2              | `0x3C000000` |
+| [`recv`][562] | PS    | check for raw data           | yes           | 1              | `0x3B000000` |
+| [`ret`][563]  | 0     | return from subroutine       |  no           | 2              | `0x3F000000` |
+| [`rol`][564]  | PS    | rotate left                  | yes           | 1              | `0x32000000` |
+| [`ror`][564]  | PS    | rotate right                 | yes           | 1              | `0x33000000` |
+| [`sbb`][527]  | PS    | subtract with borrow         | yes           | 1              | `0x27000000` |
+| [`sbbs`][527] | PS    | compare with borrow          | yes           | 1              | `0x2F000000` |
+| [`send`][567] | PS    | send raw data                |  no           | 1              | `0x3A000000` |
+| [`shl`][568]  | PS    | shift left                   | yes           | 1              | `0x34000000` |
+| [`scl`][568]  | PS    | chained shift left           | yes           | 1              | `0x36000000` |
+| [`shr`][568]  | PS    | shift right                  | yes           | 1              | `0x35000000` |
+| [`scr`][568]  | PS    | chained shift right          | yes           | 1              | `0x37000000` |
+| [`sub`][527]  | PS    | subtract                     | yes           | 1              | `0x26000000` |
+| [`subs`][527] | PS    | compare                      | yes           | 1              | `0x2E000000` |
+| [`swm`][573]  | S     | set write mask               | yes           | 1              | `0x28000000` |
+| [`test`][524] | PS    | non-storing bitwise AND      | yes           | 1              | `0x29000000` |
+| [`wait`][575] | P     | check for attention request  | yes           | 1              | `0x39000000` |
+| [`xor`][576]  | PS    | bitwise XOR                  | yes           | 1              | `0x23000000` |
+| [`xors`][576] | PS    | non-storing bitwise XOR      | yes           | 1              | `0x2B000000` |
 
 [520]: #ADD..ADC..ADDS..ADCS.--.add
     "Instruction reference – ADD, ADC, ADDS, ADCS – add"
@@ -665,44 +665,44 @@ operation from the class that matches the one in the second column, `REG`
 denotes a register (with a 4-bit name), `U16` a 16-bit unsigned integer, `U11` a
 11-bit unsigned integer and `U4` a 4-bit unsigned integer.
 
-| Example | Supported by class         |   Code | R1 shift | R2 | RB | I1 | I2 |
-| ------------------------------ | --- | ------ | -------- | -- | -- | -- | -- |
-| `OPER`                         | 0   | `0x00000000` |    |    |    |    |    |
-| `OPER REG_R1`                  | 1   | `0x00000000` |  0 |    |    |    |    |
-| `OPER [REG_R1]`                | 1   | `0x00400000` |  0 |    |    |    |    |
-| `OPER [REG_RB+REG_R1]`         | 1   | `0x00C00000` |  0 |    | 16 |    |    |
-| `OPER [REG_RB-REG_R1]`         | 1   | `0x00C08000` |  0 |    | 16 |    |    |
-| `OPER [U16_I1]`                | 1   | `0x00500000` |    |    |    |  4 |    |
-| `OPER [REG_RB+U11_I1]`         | 1   | `0x00D00000` |    |    | 16 |  4 |    |
-| `OPER [REG_RB-U11_I1]`         | 1   | `0x00D08000` |    |    | 16 |  4 |    |
-| `OPER REG_R2`                  | 1*  | `0x00000000` |    |  4 |    |    |    |
-| `OPER [REG_R2]`                | 1*  | `0x00100000` |    |  4 |    |    |    |
-| `OPER [REG_RB+REG_R2]`         | 1*  | `0x00900000` |    |  4 | 16 |    |    |
-| `OPER [REG_RB-REG_R2]`         | 1*  | `0x00908000` |    |  4 | 16 |    |    |
-| `OPER U16_I1`                  | 1*  | `0x00200000` |    |    |    |  4 |    |
-| `OPER [U16_I1]`                | 1*  | `0x00300000` |    |    |    |  4 |    |
-| `OPER [REG_RB+U11_I1]`         | 1*  | `0x00B00000` |    |    | 16 |  4 |    |
-| `OPER [REG_RB-U11_I1]`         | 1*  | `0x00B08000` |    |    | 16 |  4 |    |
-| `OPER REG_R1, REG_R2`          | 2   | `0x00000000` |  0 |  4 |    |    |    |
-| `OPER REG_R1, [REG_R2]`        | 2   | `0x00100000` |  0 |  4 |    |    |    |
-| `OPER REG_R1, [REG_RB+REG_R2]` | 2   | `0x00900000` |  0 |  4 | 16 |    |    |
-| `OPER REG_R1, [REG_RB-REG_R2]` | 2   | `0x00908000` |  0 |  4 | 16 |    |    |
-| `OPER REG_R1, U16_I1`          | 2   | `0x00200000` |  0 |    |    |  4 |    |
-| `OPER REG_R1, [U16_I1]`        | 2   | `0x00300000` |  0 |    |    |  4 |    |
-| `OPER REG_R1, [REG_RB+U11_I1]` | 2   | `0x00B00000` |  0 |    | 16 |  4 |    |
-| `OPER REG_R1, [REG_RB-U11_I1]` | 2   | `0x00B08000` |  0 |    | 16 |  4 |    |
-| `OPER [REG_R1], REG_R2`        | 2   | `0x00400000` |  0 |  4 |    |    |    |
-| `OPER [REG_RB+REG_R1], REG_R2` | 2   | `0x00C00000` |  0 |  4 | 16 |    |    |
-| `OPER [REG_RB-REG_R1], REG_R2` | 2   | `0x00C08000` |  0 |  4 | 16 |    |    |
-| `OPER [U16_I1], REG_R2`        | 2   | `0x00500000` |    |  0 |    |  4 |    |
-| `OPER [REG_RB+U11_I1], REG_R2` | 2   | `0x00D00000` |    |  0 | 16 |  4 |    |
-| `OPER [REG_RB-U11_I1], REG_R2` | 2   | `0x00D08000` |    |  0 | 16 |  4 |    |
-| `OPER [REG_R1], U16_I1`        | 2   | `0x00600000` |  0 |    |    |  4 |    |
-| `OPER [REG_RB+REG_R1], U11_I2` | 2   | `0x00E00000` |  0 |    | 16 |    |  4 |
-| `OPER [REG_RB-REG_R1], U11_I2` | 2   | `0x00E08000` |  0 |    | 16 |    |  4 |
-| `OPER [U16_I1], U4_I2`         | 2   | `0x00700000` |    |    |    |  4 |  0 |
-| `OPER [REG_RB+U11_I1], U4_I2`  | 2   | `0x00F00000` |    |    | 16 |  4 |  0 |
-| `OPER [REG_RB-U11_I1], U4_I2`  | 2   | `0x00F08000` |    |    | 16 |  4 |  0 |
+| Example                        | Supported by class | Code         | R1 shift | R2 shift | RB shift | I1 shift | I2 shift |
+| ------------------------------ | ------------------ | ------------ | -------- | -------- | -------- | -------- | -------- |
+| `OPER`                         |                  0 | `0x00000000` |          |          |          |          |          |
+| `OPER REG_R1`                  |                  P | `0x00000000` |        0 |          |          |          |          |
+| `OPER [REG_R1]`                |                  P | `0x00400000` |        0 |          |          |          |          |
+| `OPER [REG_RB+REG_R1]`         |                  P | `0x00C00000` |        0 |          |       16 |          |          |
+| `OPER [REG_RB-REG_R1]`         |                  P | `0x00C08000` |        0 |          |       16 |          |          |
+| `OPER [U16_I1]`                |                  P | `0x00500000` |          |          |          |        4 |          |
+| `OPER [REG_RB+U11_I1]`         |                  P | `0x00D00000` |          |          |       16 |        4 |          |
+| `OPER [REG_RB-U11_I1]`         |                  P | `0x00D08000` |          |          |       16 |        4 |          |
+| `OPER REG_R2`                  |                  S | `0x00000000` |          |        4 |          |          |          |
+| `OPER [REG_R2]`                |                  S | `0x00100000` |          |        4 |          |          |          |
+| `OPER [REG_RB+REG_R2]`         |                  S | `0x00900000` |          |        4 |       16 |          |          |
+| `OPER [REG_RB-REG_R2]`         |                  S | `0x00908000` |          |        4 |       16 |          |          |
+| `OPER U16_I1`                  |                  S | `0x00200000` |          |          |          |        4 |          |
+| `OPER [U16_I1]`                |                  S | `0x00300000` |          |          |          |        4 |          |
+| `OPER [REG_RB+U11_I1]`         |                  S | `0x00B00000` |          |          |       16 |        4 |          |
+| `OPER [REG_RB-U11_I1]`         |                  S | `0x00B08000` |          |          |       16 |        4 |          |
+| `OPER REG_R1, REG_R2`          |                 PS | `0x00000000` |        0 |        4 |          |          |          |
+| `OPER REG_R1, [REG_R2]`        |                 PS | `0x00100000` |        0 |        4 |          |          |          |
+| `OPER REG_R1, [REG_RB+REG_R2]` |                 PS | `0x00900000` |        0 |        4 |       16 |          |          |
+| `OPER REG_R1, [REG_RB-REG_R2]` |                 PS | `0x00908000` |        0 |        4 |       16 |          |          |
+| `OPER REG_R1, U16_I1`          |                 PS | `0x00200000` |        0 |          |          |        4 |          |
+| `OPER REG_R1, [U16_I1]`        |                 PS | `0x00300000` |        0 |          |          |        4 |          |
+| `OPER REG_R1, [REG_RB+U11_I1]` |                 PS | `0x00B00000` |        0 |          |       16 |        4 |          |
+| `OPER REG_R1, [REG_RB-U11_I1]` |                 PS | `0x00B08000` |        0 |          |       16 |        4 |          |
+| `OPER [REG_R1], REG_R2`        |                 PS | `0x00400000` |        0 |        4 |          |          |          |
+| `OPER [REG_RB+REG_R1], REG_R2` |                 PS | `0x00C00000` |        0 |        4 |       16 |          |          |
+| `OPER [REG_RB-REG_R1], REG_R2` |                 PS | `0x00C08000` |        0 |        4 |       16 |          |          |
+| `OPER [U16_I1], REG_R2`        |                 PS | `0x00500000` |          |        0 |          |        4 |          |
+| `OPER [REG_RB+U11_I1], REG_R2` |                 PS | `0x00D00000` |          |        0 |       16 |        4 |          |
+| `OPER [REG_RB-U11_I1], REG_R2` |                 PS | `0x00D08000` |          |        0 |       16 |        4 |          |
+| `OPER [REG_R1], U16_I1`        |                 PS | `0x00600000` |        0 |          |          |        4 |          |
+| `OPER [REG_RB+REG_R1], U11_I2` |                 PS | `0x00E00000` |        0 |          |       16 |          |        4 |
+| `OPER [REG_RB-REG_R1], U11_I2` |                 PS | `0x00E08000` |        0 |          |       16 |          |        4 |
+| `OPER [U16_I1], U4_I2`         |                 PS | `0x00700000` |          |          |          |        4 |        0 |
+| `OPER [REG_RB+U11_I1], U4_I2`  |                 PS | `0x00F00000` |          |          |       16 |        4 |        0 |
+| `OPER [REG_RB-U11_I1], U4_I2`  |                 PS | `0x00F08000` |          |          |       16 |        4 |        0 |
 
 Feel free to ignore the Code and Shift columns in both tables; you only need
 those if you want to get deeper into how [instructions are encoded][501]. Still,
@@ -958,6 +958,11 @@ The peripheral on the other end of the port may not detect the attention request
 if it's checking the Attention Request bit out of phase with the R2.
 [Read this][581] for a solution to this problem.
 
+Due to a hardware bug, specifying a memory address as the primary operand
+clobbers the value at that address. If this poses a problem, use a register.
+Modern versions of TPTASM don't let you assemble such broken instructions.
+
+
 [581]: #Asynchronous.I.O.protocol
     "Notes – Asynchronous I/O protocol"
 
@@ -993,6 +998,11 @@ same raw data is encountered.
 The peripheral on the other end of the port may not detect the data sent
 if it's checking the Raw Data bit out of phase with the R2.
 [Read this][581] for a solution to this problem.
+
+Due to a hardware bug, specifying a memory address as the primary operand
+clobbers the value at that address. If this poses a problem, use a register.
+Modern versions of TPTASM don't let you assemble such broken instructions.
+
 
 ### RECV -- check for raw data
 
@@ -1222,9 +1232,9 @@ an instruction:
 * find the operation code corresponding to the operation; in this case
   `send`, which has the code `0x3A000000`;
 * find the operand mode that matches the operand list and whose class
-  matches the class of the operation; `send` is in _Class 2_ and the operand
-  list matches the `OPER [REG_RB-U11_I1], REG_R2` pattern in _Class 2_; this
-  operand mode has the code `0x00D08000`;
+  matches the class of the operation; `send` is in class _primary-and-secondary_
+  and the operand list matches the `OPER [REG_RB-U11_I1], REG_R2` pattern in
+  class _primary-and-secondary_; this operand mode has the code `0x00D08000`;
 * substitue the operands into the pattern, convert them to bits and
   shift them to the left by the amount of bits shown next to the pattern in the
   enormous operand mode table;
@@ -1465,69 +1475,18 @@ which is stored as `0x212AE640` in the ROM (bit 29 is the keep-alive bit).
 
 ```
 +--+--+--+--+--+--+   +--+--+--+--+--+--+
-| 0| 5|10|15|20| ×|   |  |  |██|██|  |  |
-| 1| 6|11|16|21| ×|   |  |██|  |  |██|  |
-| 2| 7|12|17|22| ×|   |  |  |  |██|  |  |
-| 3| 8|13|18|23| ×|   |  |  |██|  |  |  |
-| 4| 9|14|19|24| ×|   |  |██|██|██|██|  |
-| ×| ×| ×| ×| ×| ×|   |  |  |  |  |  |  |
+| 0| 5|10|15|20| -|   |  |  |##|##|  |  |
+| 1| 6|11|16|21| -|   |  |##|  |  |##|  |
+| 2| 7|12|17|22| -|   |  |  |  |##|  |  |
+| 3| 8|13|18|23| -|   |  |  |##|  |  |  |
+| 4| 9|14|19|24| -|   |  |##|##|##|##|  |
+| -| -| -| -| -| -|   |  |  |  |  |  |  |
 +--+--+--+--+--+--+   +--+--+--+--+--+--+
 ```
 
-The character set encoded in the ROM of the RT2812A model is as follows:
-
-```
-       ?0    ?1    ?2    ?3    ?4    ?5    ?6    ?7    ?8    ?9    ?A    ?B    ?C    ?D    ?E    ?F  
-    ------|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|
-   |                                                                                                 
-0? |                                                                                                 
-   _                                                                                                 
-   |                                                                                                 
-1? |                                                                                                 
-   _                                                                                                 
-   |         █    █ █  ▄█▄█▄ ▄▀█▀▀ ▀  ▄▀ █▀▀▄    █    ▄▀▀   ▀▀▄   ▀▄▀    ▄                        ▄▀ 
-2? |         ▀         ▄█▄█▄ ▀▀█▀█  ▄▀   ▄▀ █▀        █       █   ▀ ▀   ▀█▀    ▄    ▀▀▀         ▄▀   
-   _         ▀          ▀ ▀  ▀▀▀▀  ▀   ▀  ▀▀▀▀         ▀▀   ▀▀                ▀            ▀   ▀     
-   | ▄▀▀█▄   ▄█   ▄▀▀▄  ▀▀▀▄    ▄█  █▀▀▀  ▄▀▀▀  ▀▀▀█  ▄▀▀█  █▀▀▄   ▄     ▄     ▄▀   ▄▄▄   ▀▄    ▀▀█  
-3? | █▄▀ █    █    ▄▀    ▀▀▄  ▄█▄█  ▀▀▀▄  █▀▀█    █   ▄▀▀▄  ▀▀▀█         ▄    ▀▄    ▄▄▄    ▄▀    ▀▀  
-   _  ▀▀▀    ▀▀▀  ▀▀▀▀  ▀▀▀      ▀  ▀▀▀    ▀▀▀    ▀   ▀▀▀   ▀▀▀    ▀    ▀       ▀         ▀      ▀   
-   | ▄▀██▄ ▄▀▀▀▄ █▀▀▀▄ ▄▀▀▀▀ █▀▀▀▄ █▀▀▀▀ █▀▀▀▀ ▄▀▀▀▀ █   █  ▀█▀     ▀█ █  ▄▀ █     █▄ ▄█ █▄  █ ▄▀▀▀▄ 
-4? | █ ▀▀▀ █▀▀▀█ █▀▀▀▄ █     █   █ █▀▀▀  █▀▀▀  █ ▀▀█ █▀▀▀█   █   ▄   █ █▀▀▄  █     █ ▀ █ █ ▀▄█ █   █ 
-   _  ▀▀▀  ▀   ▀ ▀▀▀▀   ▀▀▀▀ ▀▀▀▀  ▀▀▀▀▀ ▀      ▀▀▀▀ ▀   ▀  ▀▀▀   ▀▀▀  ▀   ▀ ▀▀▀▀▀ ▀   ▀ ▀   ▀  ▀▀▀  
-   | █▀▀▀▄ ▄▀▀▀▄ █▀▀▀▄ ▄▀▀▀▀ ▀▀█▀▀ █   █ █   █ █   █ ▀▄ ▄▀ █   █ █▀▀█▀  █▀▀  ▀▄     ▀▀█   ▄▀▄        
-5? | █▀▀▀  █ ▄ █ █▀▀▀▄ ▀▀▀▀█   █   █   █  █ █  █ █ █  ▄▀▄   ▀▄▀   ▄▀ ▄  █      ▀▄     █  ▀   ▀       
-   _ ▀      ▀▀▀  ▀   ▀ ▀▀▀▀    ▀    ▀▀▀    ▀    ▀ ▀  ▀   ▀   ▀   ▀▀▀▀▀  ▀▀▀      ▀  ▀▀▀        ▀▀▀▀▀ 
-   |   ▀▄    ▄▄   █▄▄    ▄▄▄   ▄▄█   ▄▄    ▄▄    ▄▄▄  █▄▄    ▀       ▀  █ ▄   ▀█   ▄▄▄▄   ▄▄▄    ▄▄  
-6? |        ▄▄▄█  █  █  █     █  █  █▀▀▀  █▄    ▀▀▀█  █  █   █    ▄  █  █▀▄    █   █ █ █  █  █  █  █ 
-   _         ▀▀▀  ▀▀▀    ▀▀▀   ▀▀▀   ▀▀   ▀      ▀▀   ▀  ▀   ▀     ▀▀   ▀  ▀  ▀▀▀  ▀ ▀ ▀  ▀  ▀   ▀▀  
-   |  ▄▄▄    ▄▄▄  ▄ ▄▄   ▄▄▄  █▄▄   ▄  ▄  ▄  ▄ ▄   ▄  ▄  ▄  ▄  ▄  ▄▄▄▄   █▀    █    ▀█   ▄▀█▄▀ █████ 
-7? |  █▄▄▀  ▀▄▄█  █▀    ▀▀▄▄  █     █  █  █ ▄▀ █ █ █  ▄▀▄▀   ▀▀█   ▄▀   ▀▄     ▄     ▄▀        █████ 
-   _  ▀        ▀  ▀     ▀▀▀    ▀▀▀   ▀▀    ▀    ▀ ▀   ▀  ▀    ▀   ▀▀▀▀   ▀▀    ▀    ▀▀         ▀▀▀▀▀ 
-   |  ▄█▄   ▄▄▄    ▄         █████  ▄█▄   ▄▄▄    ▄    █ █  ▄▄▄▄▄ ▀█▀█▀ ▀█▀█▀ ▄▄▄▄█  █ █  █▄▄▄▄ ██▄██ 
-8? | ▀███▀  ███   ▀█▀    ▀   ██▄██ ▀█▄█▀  █▄█   ▀▄▀   █▀█  ▄▄█▄▄  █ █   █ █  ▄▄▄▄█  █ █  █▄▄▄▄ ▄█▄█▄ 
-   _   ▀                     ▀▀▀▀▀   ▀                ▀ ▀         ▀ ▀  ▀▀  ▀     ▀ ▀▀▀▀▀ ▀     ▀▀ ▀▀ 
-   | ▄▄▄▄▄  █ █  ▄▄▄    █ █    ▄▄▄       ▄█ █   █ █▄ ▄▄▄▄   ▄▄▄▄ ▄█ █▄  █ █▄ ▄▄▄▄▄ ▄█ █  ▄█ █▄ ▀▄▀▄▀ 
-9? | ▄▄▄▄▄  █ █  ▄▄█    ▀▀▀    █▄▄  █▀█  ▄▄▄█   █▄▄▄ ▄▄ █   █ ▄▄ ▄▄▄▄▄  █ ▄▄ ▄▄ ▄▄ ▄▄ █  ▄▄ ▄▄ ▀▄▀▄▀ 
-   _        ▀ ▀                     ▀ ▀               ▀ ▀   ▀ ▀         ▀ ▀   ▀ ▀   ▀ ▀   ▀ ▀  ▀ ▀ ▀ 
-   | ▀█▀▄█ ▀▀▀▀▀   ▀   █▀▀▀▀ ▀▀▀▀█  ▄ ▄                    ▄▄▄▄▄ █     ██    ███   ████   ▄▀▄    █   
-A? | █▄▀▄▀       ▀▀▀▀▀ █▀▀▀▀ ▀▀▀▀█ ▀▄▀▄▀       ▄▄▄▄▄ █████ █████ █     ██    ███   ████   ▄▀▄   ▄█▄  
-   _ ▀ ▀▀▀         ▀   ▀▀▀▀▀ ▀▀▀▀▀       ▀▀▀▀▀ ▀▀▀▀▀ ▀▀▀▀▀ ▀▀▀▀▀ ▀     ▀▀    ▀▀▀   ▀▀▀▀   ▀ ▀    ▀   
-   |  ▄█▄    ▀   ▀         ▀  ▄▀▄   ▄█▄   ▀▀▀    █▀▀  ▀█▀▀             ▀ ▀ ▀        ▄▄▄  ▄▄▄█▄  ▄█▄  
-B? |  ▄█▄    ▀   ▀         ▀ ▄▀ ▀▄   ▀    ▄█▄  ▀▄█     ▄▀  ▀ ▀ ▀             ▀▀▀▀█ ▀▄█▄▀ ▄▄█▄▄ ▄███▄ 
-   _   ▀     ▀   ▀         ▀ ▀▀▀▀▀  ▀▀▀    ▀     ▀    ▀▀▀▀       ▀ ▀ ▀                    ▀    ▀▀▀▀▀ 
-   | █████  ▄▄██ ██▄▄   █ █   █ █   █ █   █ █   █ █   █ █   █ █   ███  ▄▄▄▄▄ ▄███   ███▄ ▄▄▄▄   ▄▄▄▄ 
-C? |  ███  ▀████ ████▀ ▄   ▄  ▄▄▄  ▄▄▄▄▄ ▄ ▄ ▄ ▄▄▄▄▄  ▄▄▄   ▄ ▄   ███  █████ ████   ████ ████   ████ 
-   _   ▀      ▀▀ ▀▀     ▀▀▀  ▀   ▀        ▀ ▀   ▀▀▀  ▀▀▀▀▀ ▀ ▀ ▀  ▀▀▀                     ▀▀▀   ▀▀▀  
-   | ▄███▄  ███▄ ▄▄▄▄▄ ▄███  ▄███▄ ▄  ▄   ▄  ▄  ▄▀▄   ▀▄▀          █           █                 █   
-D? | █████  ████ █████ ████  █████ ▄▀ ▄▀ ▀▄ ▀▄   ▄    ▄ ▄  ▀▀▀▀▀   █   ▀▀▀     ▀     ▀▀▀   █   ▀▀▀   
-   _        ▀▀▀   ▀▀▀   ▀▀▀   ▀▀▀               ▀ ▀    ▀           ▀                       ▀         
-   |   █                 █     █           █     █     █    ▄█▄    █▄   ▄█   ▀▄  ▄ ███▀   ▀███ ▄  ▄▀ 
-E? |   ▀▀▀ ▀▀█     █▀▀ ▀▀▀▀▀   █▀▀ ▀▀█▀▀ ▀▀█   ▀▀█▀▀ ▀███▀ ▀▀█▀▀ ▀▀██▀ ▀██▀▀   ███ █▀▀▄   ▄▀▀█ ███   
-   _         ▀     ▀           ▀     ▀     ▀     ▀     ▀     ▀     ▀     ▀    ▀▀▀▀     ▀ ▀     ▀▀▀▀  
-   |  ▄ ▄   ▄▄▄  ▄█▄█▄  ▄█▄  ▄█▀█▄ ▄███▄ ▄█▀█▄  █ █   ▀ ▀  ▄▀█▄▀                                     
-F? |  ▄▀▄  ▀███▀ ▀███▀ ▀███▀ ▀▀▄▀▀ ▀▀█▀▀ █▄ ▄█  ▀ ▀   █ █   ▄▄ ▄                                     
-   _               ▀     ▀    ▀▀▀   ▀▀▀   ▀▀▀   ▀ ▀   ▀ ▀  ▀ ▀▀                                      
-```
+The character set encoded in the ROM of the RT2812A model is
+[available here](font.png). The first 8 rows conform to 7-bit ASCII, as far as
+printable characters go.
 
 
 
@@ -1535,8 +1494,9 @@ F? |  ▄▀▄  ▀███▀ ▀███▀ ▀███▀ ▀▀▄▀▀
 ## Changelog
 
 * 07-07-2018: Initial release
-* 18-07-2018: Revision #1: typo and wording fixes
-* 26-10-2018: R216K8B added to the list of models
-* 28-11-2019: Linked siraben's Forth
+* 18-07-2018: Typo and wording fixes
+* 26-10-2018: Add R216K8B to the list of models
+* 28-11-2019: Link siraben's Forth
 * 04-10-2020: Document RT2812A protocol
+* 01-06-2022: Document `bump`/`send` memory primary operand bug
 
