@@ -1421,6 +1421,25 @@ That's it. If that doesn't clear everything up, bump me and I'll try to extend
 this section to cover more ground. I think it should be about enough to get you
 started with synchronisation though.
 
+### I/O protocol on-the-wire format details
+
+An R2 I/O port is a bidirectional data channel, which in practice means that
+it's two lines of FILT with changing ctypes. In the case of a horizontal pair of
+lines of FILT, the one on top forwards data to the right, while the bottom one
+to the left. A vertical pair is just the same thing rotated by 90 degrees, so
+the right one forwards data downwards, the left one upwards.
+
+Ultimately, the only FILT particle whose ctype matters is the one that the
+receiver shoots BRAY through or otherwise reads. This is however very cumbersome
+to control directly, both for complexity and documentation reasons, so for
+convenience, it's recommended to set the ctype of the entire FILT line.
+
+The keepalive bit is 0x20000000, this is always set in both lines of FILT in
+both directions. When the port is idle in a direction, no other bit is set in
+in the corresponding line of FILT. An attention request is signalled by the
+0x10000 bit being set, while raw data is signalled by the 0x20000 bit being set,
+along with the 16 least significant bits set to the data being sent.
+
 ### The terminal
 
 The terminal peripheral present in the [R2 showcase save][896], the RT2, has a
@@ -1499,4 +1518,5 @@ printable characters go.
 * 28-11-2019: Link siraben's Forth
 * 04-10-2020: Document RT2812A protocol
 * 01-06-2022: Document `bump`/`send` memory primary operand bug
+* 18-11-2024: Document I/O port on-the-wire format
 
